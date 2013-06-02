@@ -2,6 +2,7 @@
 
 import os
 import sys
+import gzip
 
 from optparse import OptionParser
 
@@ -12,6 +13,10 @@ try:
 	import simplejson as json
 except ImportError:
 	import json
+
+parent = os.path.dirname
+basename = os.path.basename
+join = os.path.join
 
 
 class StrictDecodeError(Exception):
@@ -112,8 +117,22 @@ def dump_archive(fh, fname, offsets=True):
 			print 'note: no errors encountered in tail of file'
 
 
-def check_warc(fname):
+def slurp_gz(fname):
+	f = gzip.open(fname, "rb")
+	try:
+		contents = f.read()
+	finally:
+		f.close()
+	return contents
+
+
+def check_warc(fname, greader_items):
 	print fname
+	uploader = basename(parent(fname))
+	_, item_name, _, _ = basename(fname).split('-')
+	print item_name
+	expected_encoded_feed_urls = slurp_gz(join(greader_items, item_name[0:6], item_name + '.gz')).rstrip("\n").split("\n")
+	print expected_encoded_feed_urls
 	fh = WarcRecord.open_archive(fname, gzip="auto", mode="rb")
 	try:
 		dump_archive(fh, fname)
@@ -140,7 +159,7 @@ def main():
 		for f in filenames:
 			fname = os.path.join(directory, f)
 			if fname.endswith('.warc.gz'):
-				check_warc(fname)
+				check_warc(fname, options.greader_items)
 
 
 if __name__ == '__main__':
