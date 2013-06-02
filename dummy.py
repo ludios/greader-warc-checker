@@ -8,11 +8,34 @@ from optparse import OptionParser
 from hanzo.warctools import WarcRecord
 from hanzo.httptools import RequestMessage, ResponseMessage
 
-parser = OptionParser(usage="%prog [options]")
+try:
+	import simplejson as json
+except ImportError:
+	import json
 
-parser.add_option("-i", "--input-base", dest="input_base", help="Base directory containing ./username/xxx.warc.gz files.")
-parser.add_option("-o", "--output-base", dest="output_base", help="Base directory to which to move input files; it will contain ./verified/username/xxx.warc.gz or ./bad-[failure mode]/username/xxx.warc.gz.  Should be on the same filesystem as --input-base.")
-parser.add_option("-l", "--lists", dest="lists", help="Directory to write lists of status codes, bad items, new URLs to.")
+
+class StrictDecodeError(Exception):
+	pass
+
+
+
+def _raise_decode_error(obj):
+	raise StrictDecodeError(
+		"NaN, Infinity, and -Infinity are forbidden")
+
+
+strict_json_decoder = json.decoder.JSONDecoder(parse_constant=_raise_decode_error)
+
+def strict_decode_json(s):
+	"""
+	Decode JSON-containing bytestring `s`, forbidding NaN, Infinity, and
+	-Infinity are rejected because they are not part of the JSON spec.
+
+	If any problems are found, L{JSONDecodeError} is raised.
+	"""
+	decoded, at = strict_json_decoder.raw_decode(s)
+	return decoded
+
 
 def try_makedirs(p):
 	try:
@@ -39,7 +62,7 @@ def parse_http_response(record):
 
 	header = message.header
 
-	mime_type = [v for k, v in header.headers if k.lower() == 'content-type']
+	mime_type = list(v for k, v in header.headers if k.lower() == 'content-type')
 	if mime_type:
 		mime_type = mime_type[0].split(';', 1)[0]
 	else:
@@ -99,9 +122,16 @@ def check_warc(fname):
 
 
 def main():
+	parser = OptionParser(usage="%prog [options]")
+
+	parser.add_option("-i", "--input-base", dest="input_base", help="Base directory containing ./username/xxx.warc.gz files.")
+	parser.add_option("-o", "--output-base", dest="output_base", help="Base directory to which to move input files; it will contain ./verified/username/xxx.warc.gz or ./bad-[failure mode]/username/xxx.warc.gz.  Should be on the same filesystem as --input-base.")
+	parser.add_option('-g', "--greader-items", dest="greader_items", help="greader-items directory containing ./000000/0000000000.gz files.  (Needed to know which URLs we expect in a WARC.)")
+	parser.add_option("-l", "--lists", dest="lists", help="Directory to write lists of status codes, bad items, new URLs to.")
+
 	options, args = parser.parse_args()
 	if not options.input_base or not options.output_base or not options.lists:
-		print"--input-base, --output-base, and --lists are required"
+		print"--input-base, --output-base, --greader-items, and --lists are required"
 		print
 		parser.print_help()
 		sys.exit(1)
