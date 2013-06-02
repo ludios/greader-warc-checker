@@ -76,10 +76,17 @@ def parse_http_response(record):
 	return header.code, mime_type, message
 
 
-def dump(record, content=True):
+def get_request_response_info(request, response):
+	info = {}
+	info['target_uri'] = request.get_header("WARC-Target-URI")
+	return info
+
+	###
+
 	print 'Headers:'
 	for h, v in record.headers:
 		print '\t%s: %s' % (h, v)
+		print "WARC-Target-URI:", record.get_header("WARC-Target-URI")
 	if content and record.content:
 		print 'Content Headers:'
 		content_type, content_body = record.content
@@ -100,21 +107,30 @@ def dump(record, content=True):
 			print '\t', e
 
 
-def dump_archive(fh, fname, offsets=True):
+def check_archive(fh, fname, offsets=True):
+	# First record is WARC-Type: warcinfo, then many pairs of
+	# WARC-Type: request, WARC-Type: response,
+	# then WARC-Type: metadata and some WARC-Type: resource (containing wget logs)
+	request = None
 	for offset, record, errors in fh.read_records(limit=None, offsets=offsets):
-		if record:
-			print "archive record at %s:%s" % (fname, offset)
-			#record.dump(content=True)
-			#print record.get_header("Status")
-			#print record.headers
-			dump(record)
-		elif errors:
+		if errors:
+			# XXX TODO flag as bad archive
 			print "warc errors at %s:%d" % (fname, offset if offset else 0)
 			for e in errors:
 				print '\t', e
-		else:
-			print
-			print 'note: no errors encountered in tail of file'
+			1/0
+
+		if record is None or record.type not in (WarcRecord.REQUEST, WarcRecord.RESPONSE):
+			assert request is None
+			continue
+		elif record.type == WarcRecord.REQUEST:
+			assert request is None
+			request = record
+		elif record.type == WarcRecord.RESPONSE:
+			response = record
+			info = get_request_response_info(request, response)
+			print info # TODO useful stuff
+			request = None
 
 
 def slurp_gz(fname):
@@ -126,16 +142,24 @@ def slurp_gz(fname):
 	return contents
 
 
+def full_greader_url(encoded_feed_url):
+	return (
+		"https://www.google.com/reader/api/0/stream/contents/feed/" +
+		  encoded_feed_url +
+		"?r=n&n=1000&hl=en&likes=true&comments=true&client=ArchiveTeam")
+
+
 def check_warc(fname, greader_items):
 	print fname
+
 	uploader = basename(parent(fname))
 	_, item_name, _, _ = basename(fname).split('-')
-	print item_name
 	expected_encoded_feed_urls = slurp_gz(join(greader_items, item_name[0:6], item_name + '.gz')).rstrip("\n").split("\n")
-	print expected_encoded_feed_urls
+	expected_urls = list(full_greader_url(efu) for efu in expected_encoded_feed_urls)
+
 	fh = WarcRecord.open_archive(fname, gzip="auto", mode="rb")
 	try:
-		dump_archive(fh, fname)
+		check_archive(fh, fname)
 	finally:
 		fh.close()
 
