@@ -3,43 +3,13 @@
 import os
 import sys
 import gzip
+import subprocess
 
 from optparse import OptionParser
-
-from hanzo.warctools import WarcRecord
-from hanzo.httptools import RequestMessage, ResponseMessage
-
-try:
-	import simplejson as json
-except ImportError:
-	import json
 
 parent = os.path.dirname
 basename = os.path.basename
 join = os.path.join
-
-
-class StrictDecodeError(Exception):
-	pass
-
-
-
-def _raise_decode_error(obj):
-	raise StrictDecodeError(
-		"NaN, Infinity, and -Infinity are forbidden")
-
-
-strict_json_decoder = json.decoder.JSONDecoder(parse_constant=_raise_decode_error)
-
-def strict_decode_json(s):
-	"""
-	Decode JSON-containing bytestring `s`, forbidding NaN, Infinity, and
-	-Infinity are rejected because they are not part of the JSON spec.
-
-	If any problems are found, L{JSONDecodeError} is raised.
-	"""
-	decoded, at = strict_json_decoder.raw_decode(s)
-	return decoded
 
 
 def try_makedirs(p):
@@ -47,93 +17,6 @@ def try_makedirs(p):
 		os.makedirs(p)
 	except OSError:
 		pass
-
-
-class BadHTTPResponse(Exception):
-	pass
-
-
-
-# Based on warc-tools/hanzo/warclinks.py
-def parse_http_response(record):
-	message = ResponseMessage(RequestMessage())
-	remainder = message.feed(record.content[1])
-	message.close()
-	if remainder or not message.complete():
-		if remainder:
-			raise BadHTTPResponse('trailing data in http response for %s' % (record.url,))
-		if not message.complete():
-			raise BadHTTPResponse('truncated http response for %s' % (record.url,))
-
-	header = message.header
-
-	mime_type = list(v for k, v in header.headers if k.lower() == 'content-type')
-	if mime_type:
-		mime_type = mime_type[0].split(';', 1)[0]
-	else:
-		mime_type = None
-
-	return header.code, mime_type, message
-
-
-def get_request_response_info(request, response):
-	info = {}
-	info['target_uri'] = request.get_header("WARC-Target-URI")
-	status_code, mime_type, message = parse_http_response(response)
-	if status_code == 200:
-		strict_decode_json(message.get_body())
-	return info
-
-	###
-
-	print 'Headers:'
-	for h, v in record.headers:
-		print '\t%s: %s' % (h, v)
-		print "WARC-Target-URI:", record.get_header("WARC-Target-URI")
-	if content and record.content:
-		print 'Content Headers:'
-		content_type, content_body = record.content
-		print '\t', record.CONTENT_TYPE + ':', content_type
-		print '\t', record.CONTENT_LENGTH + ':', len(content_body)
-		if record.type == WarcRecord.RESPONSE and content_type.startswith('application/http'):
-			status_code, mime_type, message = parse_http_response(record)
-			print status_code
-			print message.get_body()
-		print
-	else:
-		print 'Content: none'
-		print
-		print
-	if record.errors:
-		print 'Errors:'
-		for e in record.errors:
-			print '\t', e
-
-
-def check_archive(fh, fname, offsets=True):
-	# First record is WARC-Type: warcinfo, then many pairs of
-	# WARC-Type: request, WARC-Type: response,
-	# then WARC-Type: metadata and some WARC-Type: resource (containing wget logs)
-	request = None
-	for offset, record, errors in fh.read_records(limit=None, offsets=offsets):
-		if errors:
-			# XXX TODO flag as bad archive
-			print "warc errors at %s:%d" % (fname, offset if offset else 0)
-			for e in errors:
-				print '\t', e
-			1/0
-
-		if record is None or record.type not in (WarcRecord.REQUEST, WarcRecord.RESPONSE):
-			assert request is None
-			continue
-		elif record.type == WarcRecord.REQUEST:
-			assert request is None
-			request = record
-		elif record.type == WarcRecord.RESPONSE:
-			response = record
-			info = get_request_response_info(request, response)
-			print info # TODO useful stuff
-			request = None
 
 
 def slurp_gz(fname):
@@ -160,11 +43,22 @@ def check_warc(fname, greader_items):
 	expected_encoded_feed_urls = slurp_gz(join(greader_items, item_name[0:6], item_name + '.gz')).rstrip("\n").split("\n")
 	expected_urls = list(full_greader_url(efu) for efu in expected_encoded_feed_urls)
 
-	fh = WarcRecord.open_archive(fname, gzip="auto", mode="rb")
-	try:
-		check_archive(fh, fname)
-	finally:
-		fh.close()
+	# We use pipes to allow for multi-core execution without writing a crazy amount
+	# of Python code.
+
+	# "Z8c8Jv5QWmpgVRxUsGoulMw" is the embedded 404 image we want to ignore
+	# "        " is what begins styling on the 404 page
+
+	assert not ' ' in fname, fname
+	assert not "'" in fname, fname
+	assert not "\\" in fname, fname
+	args = ['/bin/sh', '-c', r"""gunzip --to-stdout '%s' | grep -P --color=never -v "^(Z8c8Jv5QWmpgVRxUsGoulMw|        )" | grep -P --color=never -o 'href\\u003d\\"[^\\]+\\"|"continuation":"C.{10}C"|WARC-Target-URI: .*|HTTP/1\.1 .*'""" % (fname,)]
+	proc = subprocess.Popen(args, stdout=subprocess.PIPE)
+	while True:
+		line = proc.stdout.readline()
+		if not line:
+			break
+		print line.rstrip()
 
 
 def main():
