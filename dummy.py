@@ -79,6 +79,9 @@ def parse_http_response(record):
 def get_request_response_info(request, response):
 	info = {}
 	info['target_uri'] = request.get_header("WARC-Target-URI")
+	status_code, mime_type, message = parse_http_response(response)
+	if status_code == 200:
+		strict_decode_json(message.get_body())
 	return info
 
 	###
