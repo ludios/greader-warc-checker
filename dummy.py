@@ -43,22 +43,45 @@ def check_warc(fname, greader_items):
 	expected_encoded_feed_urls = slurp_gz(join(greader_items, item_name[0:6], item_name + '.gz')).rstrip("\n").split("\n")
 	expected_urls = list(full_greader_url(efu) for efu in expected_encoded_feed_urls)
 
-	# We use pipes to allow for multi-core execution without writing a crazy amount
-	# of Python code.
-
-	# "Z8c8Jv5QWmpgVRxUsGoulMw" is the embedded 404 image we want to ignore
-	# "        " is what begins styling on the 404 page
+	links = set()
 
 	assert not ' ' in fname, fname
 	assert not "'" in fname, fname
 	assert not "\\" in fname, fname
-	args = ['/bin/sh', '-c', r"""gunzip --to-stdout '%s' | grep -P --color=never -v "^(Z8c8Jv5QWmpgVRxUsGoulMw|        )" | grep -P --color=never -o 'href\\u003d\\"[^\\]+\\"|"continuation":"C.{10}C"|WARC-Target-URI: .*|HTTP/1\.1 .*'""" % (fname,)]
+
+	# We use pipes to allow for multi-core execution without writing a crazy amount
+	# of Python code that wires up subprocesses.
+
+	# "Z8c8Jv5QWmpgVRxUsGoulMw" is the embedded 404 image we want to ignore
+
+	# Do not add a ^ to the second grep - it will slow things 6x
+	args = ['/bin/sh', '-c', r"""gunzip --to-stdout '%s' | grep -G --color=never -v "^Z8c8Jv5QWmpgVRxUsGoulMw" | grep -P --color=never -o 'href\\u003d\\"[^\\]+\\"|"continuation":"C.{10}C"|WARC-Target-URI: .*|HTTP/1\.1 .*'""" % (fname,)]
 	proc = subprocess.Popen(args, stdout=subprocess.PIPE)
+	last_url = None
+	found_urls = set()
 	while True:
 		line = proc.stdout.readline()
 		if not line:
 			break
-		print line.rstrip()
+		if line.startswith(r'href\\u003d\\"'):
+			links.add(line)
+		elif line.startswith("WARC-Target-URI: "):
+			#print line
+			last_url = line[17:-1]
+			found_urls.add(last_url)
+		elif line.startswith("HTTP/1.1 "):
+			_, status_code, message = line.split(" ", 2)
+			# last_url
+
+			# if code not in ("200", "404"):
+		elif line.startswith('"continuation":"'):
+			continuation = line[16:28]
+			# TODO: add to expected_urls, or another list/set
+			#1/0
+		else:
+			# Ignore
+			pass
+		#elif line.startswith('')
 
 
 def main():
