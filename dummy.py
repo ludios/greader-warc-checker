@@ -3,6 +3,7 @@
 import os
 import sys
 import gzip
+import re
 import subprocess
 
 from optparse import OptionParser
@@ -35,6 +36,16 @@ def full_greader_url(encoded_feed_url):
 		"?r=n&n=1000&hl=en&likes=true&comments=true&client=ArchiveTeam")
 
 
+CONTINUATION_RE = re.compile(r"\?c=............&")
+QUESTION_RE = re.compile(r"\?")
+
+def url_with_continuation(url, continuation):
+	assert len(continuation) == 12, "continuation should be 12 bytes, was %d" % (len(continuation),)
+	if re.findall(CONTINUATION_RE, url):
+		return re.sub(CONTINUATION_RE, "?c=" + continuation + "&", url)
+	return re.sub(QUESTION_RE, "?c=" + continuation + "&", url, count=1)
+
+
 def check_warc(fname, greader_items):
 	print fname
 
@@ -63,8 +74,9 @@ def check_warc(fname, greader_items):
 		line = proc.stdout.readline()
 		if not line:
 			break
-		if line.startswith(r'href\\u003d\\"'):
-			links.add(line)
+		##print line
+		if line.startswith(r'href\u003d\"'):
+			links.add(line[12:-3])
 		elif line.startswith("WARC-Target-URI: "):
 			#print line
 			last_url = line[17:-1]
@@ -76,12 +88,16 @@ def check_warc(fname, greader_items):
 			# if code not in ("200", "404"):
 		elif line.startswith('"continuation":"'):
 			continuation = line[16:28]
+			if last_url:
+				print url_with_continuation(last_url, continuation)
 			# TODO: add to expected_urls, or another list/set
 			#1/0
 		else:
 			# Ignore
 			pass
 		#elif line.startswith('')
+
+	##print "\n".join(sorted(links))
 
 
 def main():
@@ -91,6 +107,7 @@ def main():
 	parser.add_option("-o", "--output-base", dest="output_base", help="Base directory to which to move input files; it will contain ./verified/username/xxx.warc.gz or ./bad-[failure mode]/username/xxx.warc.gz.  Should be on the same filesystem as --input-base.")
 	parser.add_option('-g', "--greader-items", dest="greader_items", help="greader-items directory containing ./000000/0000000000.gz files.  (Needed to know which URLs we expect in a WARC.)")
 	parser.add_option("-l", "--lists", dest="lists", help="Directory to write lists of status codes, bad items, new URLs to.")
+	parser.add_option("-u", "--upload", dest="upload", help="rsync destination to sync lists to.")
 
 	options, args = parser.parse_args()
 	if not options.input_base or not options.output_base or not options.lists:
@@ -98,6 +115,11 @@ def main():
 		print
 		parser.print_help()
 		sys.exit(1)
+
+	verified_dir = join(options.output_base, "verified")
+	bad_status_code_dir = join(options.output_base, "bad-status-code")
+	bad_missing_urls = join(options.output_base, "bad-missing-urls")
+	bad_missing_continued_urls = join(options.output_base, "bad-missing-continued-urls")
 
 	for directory, dirnames, filenames in os.walk(options.input_base):
 		for f in filenames:
