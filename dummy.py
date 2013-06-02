@@ -1,39 +1,30 @@
 #!/usr/bin/env python
-"""warcdump - dump warcs in a slightly more humane format"""
 
 import os
-import re
 import sys
-
-import sys
-import os.path
 
 from optparse import OptionParser
 
-from hanzo.warctools import WarcRecord, expand_files
+from hanzo.warctools import WarcRecord
 from hanzo.httptools import RequestMessage, ResponseMessage
 
-parser = OptionParser(usage="%prog [options] warc warc warc")
+parser = OptionParser(usage="%prog [options]")
 
-parser.add_option("-l", "--limit", dest="limit")
-parser.add_option("-I", "--input", dest="input_format")
-parser.add_option("-L", "--log-level", dest="log_level")
+parser.add_option("-i", "--input-base", dest="input_base", help="Base directory containing ./username/xxx.warc.gz files.")
+parser.add_option("-o", "--output-base", dest="output_base", help="Base directory to which to move input files; it will contain ./verified/username/xxx.warc.gz or ./bad-[failure mode]/username/xxx.warc.gz.  Should be on the same filesystem as --input-base.")
+parser.add_option("-l", "--lists", dest="lists", help="Directory to write lists of status codes, bad items, new URLs to.")
 
-parser.set_defaults(output_directory=None, limit=None, log_level="info")
+def try_makedirs(p):
+	try:
+		os.makedirs(p)
+	except OSError:
+		pass
 
-def main(argv):
-	(options, input_files) = parser.parse_args(args=argv[1:])
-
-	for name in expand_files(input_files):
-		fh = WarcRecord.open_archive(name, gzip="auto", mode="rb")
-		dump_archive(fh,name)
-
-		fh.close()
-
-	return 0
 
 class BadHTTPResponse(Exception):
 	pass
+
+
 
 # Based on warc-tools/hanzo/warclinks.py
 def parse_http_response(record):
@@ -55,6 +46,7 @@ def parse_http_response(record):
 		mime_type = None
 
 	return header.code, mime_type, message
+
 
 def dump(record, content=True):
 	print 'Headers:'
@@ -79,25 +71,47 @@ def dump(record, content=True):
 		for e in record.errors:
 			print '\t', e
 
-def dump_archive(fh, name, offsets=True):
+
+def dump_archive(fh, fname, offsets=True):
 	for offset, record, errors in fh.read_records(limit=None, offsets=offsets):
 		if record:
-			print "archive record at %s:%s" % (name, offset)
+			print "archive record at %s:%s" % (fname, offset)
 			#record.dump(content=True)
 			#print record.get_header("Status")
 			#print record.headers
 			dump(record)
 		elif errors:
-			print "warc errors at %s:%d" % (name, offset if offset else 0)
+			print "warc errors at %s:%d" % (fname, offset if offset else 0)
 			for e in errors:
 				print '\t', e
 		else:
 			print
 			print 'note: no errors encountered in tail of file'
 
-def run():
-	sys.exit(main(sys.argv))
+
+def check_warc(fname):
+	print fname
+	fh = WarcRecord.open_archive(fname, gzip="auto", mode="rb")
+	try:
+		dump_archive(fh, fname)
+	finally:
+		fh.close()
+
+
+def main():
+	options, args = parser.parse_args()
+	if not options.input_base or not options.output_base or not options.lists:
+		print"--input-base, --output-base, and --lists are required"
+		print
+		parser.print_help()
+		sys.exit(1)
+
+	for directory, dirnames, filenames in os.walk(options.input_base):
+		for f in filenames:
+			fname = os.path.join(directory, f)
+			if fname.endswith('.warc.gz'):
+				check_warc(fname)
 
 
 if __name__ == '__main__':
-	run()
+	main()
