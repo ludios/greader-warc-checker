@@ -52,13 +52,15 @@ def check_warc(fname, greader_items):
 	assert not ' ' in fname, fname
 	assert not "'" in fname, fname
 	assert not "\\" in fname, fname
-	args = ['/bin/sh', '-c', r"""gunzip --to-stdout '%s' | grep -P --color=never -v "^(Z8c8Jv5QWmpgVRxUsGoulMw|        )" | grep -P --color=never -o 'href\\u003d\\"[^\\]+\\"|"continuation":"C.{10}C"|WARC-Target-URI: .*|HTTP/1\.1 .*'""" % (fname,)]
+	##args = ['/bin/sh', '-c', r"""gunzip --to-stdout '%s' | grep -P --color=never -v "^(Z8c8Jv5QWmpgVRxUsGoulMw|        )" | grep -P --color=never -o 'href\\u003d\\"[^\\]+\\"|"continuation":"C.{10}C"|WARC-Target-URI: .*|HTTP/1\.1 .*'""" % (fname,)]
+	args = ['/bin/sh', '-c', r"""gunzip --to-stdout '%s'""" % (fname,)]
 	proc = subprocess.Popen(args, stdout=subprocess.PIPE)
 	while True:
 		line = proc.stdout.readline()
 		if not line:
 			break
-		print line.rstrip()
+		if r'href\\u003d' in line or line.startswith("HTTP/1.1") or line.startswith("WARC-Target-URI: ") or '"continuation":"' in line:
+			print line
 
 
 def main():
