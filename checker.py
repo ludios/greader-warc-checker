@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = 20130603.1238
+__version__ = "20130603.1329"
 
 import os
 import sys
@@ -223,8 +223,16 @@ trap '' INT tstp 30;
 		if is_continued_url(url) and status_code != "200":
 			raise BadWARC("All continued responses must be status 200, was %r" % (status_code,))
 
-	if expected_urls != got_urls:
-		raise BadWARC("WARC is missing %r or has extra URLs %r" % (expected_urls - got_urls, got_urls - expected_urls))
+	# Don't check for extra URLs - it looks like we're failing to detect a small
+	# amount of continuation=s.
+	# See ivan/greader-0000043504-20130531-171242.warc.gz
+	# See ivan/greader-0000050357-20130601-005325.warc.gz
+
+	##if expected_urls != got_urls:
+	##	raise BadWARC("WARC is missing %r or has extra URLs %r" % (expected_urls - got_urls, got_urls - expected_urls))
+
+	if expected_urls - got_urls:
+		raise BadWARC("WARC is missing %r" % (expected_urls - got_urls,))
 
 	sorted_hrefs = list(found_hrefs)
 	sorted_hrefs.sort()
