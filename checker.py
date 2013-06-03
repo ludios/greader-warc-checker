@@ -34,6 +34,12 @@ def check_filename(fname):
 		raise ValueError("Bad filename %r" % (fname,))
 
 
+def filename_without_prefix(fname, prefix):
+	if not fname.startswith(prefix + "/"):
+		raise ValueError("%r does not start with %" % (fname, prefix + "/"))
+	return fname.replace(prefix + "/", "", 1)
+
+
 def try_makedirs(p):
 	try:
 		os.makedirs(p)
@@ -246,7 +252,8 @@ def main():
 		verified_dir = join(options.output_base, "verified")
 		bad_dir = join(options.output_base, "bad")
 	else:
-		verified_dir = bad_dir = None
+		verified_dir = None
+		bad_dir = None
 
 	if options.lists_dir:
 		now = datetime.datetime.now()
@@ -276,13 +283,17 @@ def main():
 				try:
 					check_warc(fname, info, options.greader_items, href_log, reqres_log)
 				except BadWARC, e:
-					# TODO move the file to bad/ instead
 					json.dump(dict(
 						checker_version=__version__, valid=False,
 						traceback=traceback.format_exc(), **info
 					), verification_log)
 					verification_log.write("\n")
 					verification_log.flush()
+
+					if bad_dir:
+						dest_fname = join(bad_dir, filename_without_prefix(fname, options.input_base))
+						try_makedirs(parent(dest_fname))
+						os.rename(fname, dest_fname)
 				else:
 					json.dump(dict(
 						checker_version=__version__, valid=True,
@@ -290,6 +301,11 @@ def main():
 					), verification_log)
 					verification_log.write("\n")
 					verification_log.flush()
+
+					if verified_dir:
+						dest_fname = join(verified_dir, filename_without_prefix(fname, options.input_base))
+						try_makedirs(parent(dest_fname))
+						os.rename(fname, dest_fname)
 
 
 if __name__ == '__main__':
