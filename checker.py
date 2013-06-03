@@ -275,11 +275,11 @@ def main():
 					check_warc(fname, info, options.greader_items, href_log, reqres_log)
 				except BadWARC, e:
 					# TODO move the file to bad/ instead
-					json.dump(dict(valid=False, exception=repr(e), traceback=traceback.format_exc(), **info), verification_log)
+					json.dump(dict(valid=False, traceback=traceback.format_exc(), **info), verification_log)
 					verification_log.write("\n")
 					verification_log.flush()
 				else:
-					json.dump(dict(valid=True, exception=None, traceback=None, **info), verification_log)
+					json.dump(dict(valid=True, traceback=None, **info), verification_log)
 					verification_log.write("\n")
 					verification_log.flush()
 
