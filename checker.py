@@ -199,6 +199,7 @@ def check_warc(fname, info, greader_items, href_log, reqres_log, exes):
 	assert not "'" in ignore_re
 	assert not "'" in keep_re
 	args = [exes['sh'], '-c', r"""
+trap '' INT tstp 30;
 %(gunzip)s --to-stdout '%(fname)s' |
 %(grep)s -G --color=never -v '%(ignore_re)s' |
 %(grep)s -P --color=never -o '%(keep_re)s'""".replace("\n", "") % dict(
@@ -339,8 +340,11 @@ def main():
 		check_filename(href_log_fname)
 		assert not os.path.exists(href_log_fname), href_log_fname
 		try_makedirs(parent(href_log_fname))
+		# trap '' INT tstp 30; prevents sh from catching SIGINT (ctrl-c).  If untrapped,
+		# bzip2 or lbzip2 will be killed when you hit ctrl-c, leaving you with a corrupt .bz2.
+		# (Sadly, this `trap` does not seem to work with lbzip2.)
 		href_log_proc = subprocess.Popen(
-			[exes['sh'], '-c', '%(bzip2)s > %(href_log_fname)s' %
+			[exes['sh'], '-c', r"trap '' INT tstp 30; %(bzip2)s > %(href_log_fname)s" %
 						dict(href_log_fname=href_log_fname, **exes)],
 			stdin=subprocess.PIPE, bufsize=4*1024*1024)
 		href_log = href_log_proc.stdin
@@ -350,7 +354,7 @@ def main():
 		assert not os.path.exists(reqres_log_fname), reqres_log_fname
 		try_makedirs(parent(reqres_log_fname))
 		reqres_log_proc = subprocess.Popen(
-			[exes['sh'], '-c', '%(bzip2)s > %(reqres_log_fname)s' %
+			[exes['sh'], '-c', r"trap '' INT tstp 30; %(bzip2)s > %(reqres_log_fname)s" %
 				dict(reqres_log_fname=reqres_log_fname, **exes)],
 			stdin=subprocess.PIPE, bufsize=4*1024*1024)
 		reqres_log = reqres_log_proc.stdin
