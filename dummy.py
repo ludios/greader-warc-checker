@@ -46,6 +46,99 @@ def url_with_continuation(url, continuation):
 	return re.sub(QUESTION_RE, "?c=" + continuation + "&", url, count=1)
 
 
+class BadWARC(Exception):
+	pass
+
+
+
+def read_request_responses(grepfh, hrefs):
+	"""
+	L{grepfh} is the file object containing grep-filtered WARC data.
+
+	L{hrefs} is a set into which this will add JSON-encoded hrefs to.
+	"""
+	WANT_FIRST_TARGET_URI, NEED_SECOND_TARGET_URL, NEED_STATUS_LINE, WANT_CONTINUATION = range(4)
+	state = WANT_FIRST_TARGET_URI
+	last_url = None
+	continuation = None
+	status_code = None
+	while True:
+		line = grepfh.readline()
+		if not line:
+			if last_url is not None:
+				if status_code is None:
+					raise BadWARC("Did not get a status code for %r" % (last_url,))
+				yield dict(url=last_url, continuation=continuation, status_code=status_code)
+			break
+
+		if state == WANT_FIRST_TARGET_URI:
+			# in this state, we may get the Target-URI, or we may get an href
+			if line.startswith("WARC-Target-URI: "):
+				if last_url is not None:
+					if status_code is None:
+						raise BadWARC("Did not get a status code for %r" % (last_url,))
+					yield dict(url=last_url, continuation=continuation, status_code=status_code)
+				continuation = None
+				status_code = None
+				last_url = line[17:-2]
+				if last_url[:4] != "http": # skip warc metadata
+					last_url = None
+					state = WANT_FIRST_TARGET_URI
+				else:
+					state = NEED_SECOND_TARGET_URL
+			elif line.startswith(r'href\u003d\"'):
+				hrefs.add(line[12:-3])
+			else:
+				# Ignore unexpected lines, as the lack of ^ in our initial grep filter
+				# outputs some garbage
+				pass
+
+		elif state == NEED_SECOND_TARGET_URL:
+			# Should be an exact duplicate of the last line
+			assert last_url is not None, last_url
+			if not line.startswith("WARC-Target-URI: "):
+				raise BadWARC("Mssing WARC-Target-URI for response")
+			response_url = line[17:-2]
+			if response_url != last_url:
+				raise BadWARC("WARC-Target-URI for response did not match request: %r" % ((last_url, response_url),))
+			state = NEED_STATUS_LINE
+
+		elif state == NEED_STATUS_LINE:
+			try:
+				http_version, status_code, message = line.split(" ", 2)
+			except ValueError:
+				raise BadWARC("Got unexpected status line %r" % (line,))
+			if http_version != "HTTP/1.1"or status_code not in ("200", "404"):
+				raise BadWARC("Got unexpected status line %r" % (line,))
+			state = WANT_CONTINUATION
+
+		elif state == WANT_CONTINUATION:
+			# could get continuation (once chance at this), or a link, or next request
+			if line.startswith('"continuation":"'):
+				continuation = line[16:28]
+				state = WANT_FIRST_TARGET_URI
+			elif line.startswith(r'href\u003d\"'):
+				hrefs.add(line[12:-3])
+				state = WANT_FIRST_TARGET_URI
+			elif line.startswith("WARC-Target-URI: "):
+				yield dict(url=last_url, continuation=continuation, status_code=status_code)
+				continuation = None
+				status_code = None
+				last_url = line[17:-2]
+				if last_url[:4] != "http": # skip warc metadata
+					last_url = None
+					state = WANT_FIRST_TARGET_URI
+				else:
+					state = NEED_SECOND_TARGET_URL
+			else:
+				# Ignore unexpected lines, as the lack of ^ in our initial grep filter
+				# outputs some garbage
+				pass
+
+		else:
+			raise RuntimeError("Invalid state %r" % (state,))
+
+
 def check_warc(fname, greader_items):
 	print fname
 
@@ -53,8 +146,6 @@ def check_warc(fname, greader_items):
 	_, item_name, _, _ = basename(fname).split('-')
 	expected_encoded_feed_urls = slurp_gz(join(greader_items, item_name[0:6], item_name + '.gz')).rstrip("\n").split("\n")
 	expected_urls = list(full_greader_url(efu) for efu in expected_encoded_feed_urls)
-
-	links = set()
 
 	assert not ' ' in fname, fname
 	assert not "'" in fname, fname
@@ -68,36 +159,11 @@ def check_warc(fname, greader_items):
 	# Do not add a ^ to the second grep - it will slow things 6x
 	args = ['/bin/sh', '-c', r"""gunzip --to-stdout '%s' | grep -G --color=never -v "^Z8c8Jv5QWmpgVRxUsGoulMw" | grep -P --color=never -o 'href\\u003d\\"[^\\]+\\"|"continuation":"C.{10}C"|WARC-Target-URI: .*|HTTP/1\.1 .*'""" % (fname,)]
 	proc = subprocess.Popen(args, stdout=subprocess.PIPE)
-	last_url = None
-	found_urls = set()
-	while True:
-		line = proc.stdout.readline()
-		if not line:
-			break
-		##print line
-		if line.startswith(r'href\u003d\"'):
-			links.add(line[12:-3])
-		elif line.startswith("WARC-Target-URI: "):
-			#print line
-			last_url = line[17:-1]
-			found_urls.add(last_url)
-		elif line.startswith("HTTP/1.1 "):
-			_, status_code, message = line.split(" ", 2)
-			# last_url
+	found_hrefs = set()
+	for o in read_request_responses(proc.stdout, found_hrefs):
+		print o
 
-			# if code not in ("200", "404"):
-		elif line.startswith('"continuation":"'):
-			continuation = line[16:28]
-			if last_url:
-				print url_with_continuation(last_url, continuation)
-			# TODO: add to expected_urls, or another list/set
-			#1/0
-		else:
-			# Ignore
-			pass
-		#elif line.startswith('')
-
-	##print "\n".join(sorted(links))
+	##print "\n".join(repr(s) for s in sorted(found_hrefs))
 
 
 def main():
