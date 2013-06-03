@@ -98,13 +98,14 @@ def read_request_responses(grepfh, hrefs):
 	last_url = None
 	continuation = None
 	status_code = None
+	_readline = grepfh.readline
 	while True:
-		line = grepfh.readline()
+		line = _readline()
 		if not line:
 			if last_url is not None:
 				if status_code is None:
 					raise BadWARC("Did not get a status code for %r" % (last_url,))
-				yield dict(url=last_url, continuation=continuation, status_code=status_code)
+				yield {"url": last_url, "continuation": continuation, "status_code": status_code}
 			break
 
 		if state == WANT_FIRST_TARGET_URI:
@@ -113,7 +114,7 @@ def read_request_responses(grepfh, hrefs):
 				if last_url is not None:
 					if status_code is None:
 						raise BadWARC("Did not get a status code for %r" % (last_url,))
-					yield dict(url=last_url, continuation=continuation, status_code=status_code)
+					yield {"url": last_url, "continuation": continuation, "status_code": status_code}
 				continuation = None
 				status_code = None
 				last_url = line[17:-2]
@@ -157,7 +158,7 @@ def read_request_responses(grepfh, hrefs):
 				hrefs.add(line[12:-3])
 				state = WANT_FIRST_TARGET_URI
 			elif line.startswith("WARC-Target-URI: "):
-				yield dict(url=last_url, continuation=continuation, status_code=status_code)
+				yield {"url": last_url, "continuation": continuation, "status_code": status_code}
 				continuation = None
 				status_code = None
 				last_url = line[17:-2]
