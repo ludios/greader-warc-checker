@@ -1,9 +1,10 @@
 #!/usr/bin/env python
 
-__version__ = 20130603.0933
+__version__ = 20130603.1021
 
 import os
 import sys
+import time
 import gzip
 import re
 import subprocess
@@ -235,15 +236,21 @@ def check_warc(fname, info, greader_items, href_log, reqres_log, exes):
 
 
 def check_input_base(options, verified_dir, bad_dir, href_log, reqres_log, verification_log, exes):
+	start = time.time()
+	size_total = 0
 	for directory, dirnames, filenames in os.walk(options.input_base):
 		for f in filenames:
 			fname = os.path.join(directory, f)
 			if fname.endswith('.warc.gz'):
+				size_total += os.stat(fname).st_size
+				def get_mb_sec():
+					return ("%.2f MB/s" % (size_total/(time.time() - start) / (1024 * 1024))).rjust(10)
+
 				info = get_info_from_warc_fname(fname)
 				try:
 					check_warc(fname, info, options.greader_items, href_log, reqres_log, exes)
 				except BadWARC:
-					print "bad", filename_without_prefix(fname, options.input_base)
+					print get_mb_sec(), "bad", filename_without_prefix(fname, options.input_base)
 					if verification_log:
 						json.dump(dict(
 							checker_version=__version__, valid=False,
@@ -257,7 +264,7 @@ def check_input_base(options, verified_dir, bad_dir, href_log, reqres_log, verif
 						try_makedirs(parent(dest_fname))
 						os.rename(fname, dest_fname)
 				else:
-					print "ok ", filename_without_prefix(fname, options.input_base)
+					print get_mb_sec(), "ok ", filename_without_prefix(fname, options.input_base)
 					if verification_log:
 						json.dump(dict(
 							checker_version=__version__, valid=True,
@@ -275,7 +282,7 @@ def check_input_base(options, verified_dir, bad_dir, href_log, reqres_log, verif
 def get_exes():
 	bzip2_exe = distutils.spawn.find_executable('lbzip2')
 	if not bzip2_exe:
-		print "Install lbzip2 for faster bzip2-encoding performance on multi-core machines"
+		print "WARNING: Install lbzip2; this program is ~1.4x slower with vanilla bzip2"
 		bzip2_exe = distutils.spawn.find_executable('bzip2')
 		if not bzip2_exe:
 			raise RuntimeError("lbzip2 or bzip2 not found in PATH")
