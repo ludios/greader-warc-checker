@@ -109,8 +109,10 @@ def read_request_responses(grepfh, hrefs):
 			break
 
 		if state == WANT_FIRST_TARGET_URI:
+			if line.startswith(r'href\u003d\"'):
+				hrefs.add(line[12:-3])
 			# in this state, we may get the Target-URI, or we may get an href
-			if line.startswith("WARC-Target-URI: "):
+			elif line.startswith("WARC-Target-URI: "):
 				if last_url is not None:
 					if status_code is None:
 						raise BadWARC("Did not get a status code for %r" % (last_url,))
@@ -123,8 +125,6 @@ def read_request_responses(grepfh, hrefs):
 					state = WANT_FIRST_TARGET_URI
 				else:
 					state = NEED_SECOND_TARGET_URL
-			elif line.startswith(r'href\u003d\"'):
-				hrefs.add(line[12:-3])
 			else:
 				# Ignore unexpected lines, as the lack of ^ in our initial grep filter
 				# outputs some garbage
@@ -151,11 +151,11 @@ def read_request_responses(grepfh, hrefs):
 
 		elif state == WANT_CONTINUATION:
 			# could get continuation (once chance at this), or a link, or next request
-			if line.startswith('"continuation":"'):
-				continuation = line[16:28]
-				state = WANT_FIRST_TARGET_URI
-			elif line.startswith(r'href\u003d\"'):
+			if line.startswith(r'href\u003d\"'):
 				hrefs.add(line[12:-3])
+				state = WANT_FIRST_TARGET_URI
+			elif line.startswith('"continuation":"'):
+				continuation = line[16:28]
 				state = WANT_FIRST_TARGET_URI
 			elif line.startswith("WARC-Target-URI: "):
 				yield {"url": last_url, "continuation": continuation, "status_code": status_code}
