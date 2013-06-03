@@ -46,6 +46,10 @@ def url_with_continuation(url, continuation):
 	return re.sub(QUESTION_RE, "?c=" + continuation + "&", url, count=1)
 
 
+def is_continued_url(url):
+	return '?c=' in url
+
+
 class BadWARC(Exception):
 	pass
 
@@ -145,7 +149,7 @@ def check_warc(fname, greader_items):
 	uploader = basename(parent(fname))
 	_, item_name, _, _ = basename(fname).split('-')
 	expected_encoded_feed_urls = slurp_gz(join(greader_items, item_name[0:6], item_name + '.gz')).rstrip("\n").split("\n")
-	expected_urls = list(full_greader_url(efu) for efu in expected_encoded_feed_urls)
+	expected_urls = set(full_greader_url(efu) for efu in expected_encoded_feed_urls)
 
 	assert not ' ' in fname, fname
 	assert not "'" in fname, fname
@@ -160,8 +164,19 @@ def check_warc(fname, greader_items):
 	args = ['/bin/sh', '-c', r"""gunzip --to-stdout '%s' | grep -G --color=never -v "^Z8c8Jv5QWmpgVRxUsGoulMw" | grep -P --color=never -o 'href\\u003d\\"[^\\]+\\"|"continuation":"C.{10}C"|WARC-Target-URI: .*|HTTP/1\.1 .*'""" % (fname,)]
 	proc = subprocess.Popen(args, stdout=subprocess.PIPE)
 	found_hrefs = set()
-	for o in read_request_responses(proc.stdout, found_hrefs):
-		print o
+	got_urls = set()
+	for req_rep in read_request_responses(proc.stdout, found_hrefs):
+		print req_rep
+		url = req_rep['url']
+		status_code = req_rep['status_code']
+		if req_rep['continuation'] is not None:
+			expected_urls.add(url_with_continuation(url, req_rep['continuation']))
+		got_urls.add(url)
+		if is_continued_url(url) and status_code != "200":
+			raise BadWARC("All continued responses must be status 200, was %r" % (status_code,))
+
+	if expected_urls != got_urls:
+		raise BadWARC("WARC is missing %r or has extra URLs %r" % (expected_urls - got_urls, got_urls - expected_urls))
 
 	##print "\n".join(repr(s) for s in sorted(found_hrefs))
 
@@ -191,7 +206,11 @@ def main():
 		for f in filenames:
 			fname = os.path.join(directory, f)
 			if fname.endswith('.warc.gz'):
-				check_warc(fname, options.greader_items)
+				try:
+					check_warc(fname, options.greader_items)
+				except BadWARC:
+					# TODO move the file to bad/ instead
+					raise
 
 
 if __name__ == '__main__':
