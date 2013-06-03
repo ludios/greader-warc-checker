@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = 20130603.1029
+__version__ = 20130603.1111
 
 import os
 import sys
@@ -326,7 +326,9 @@ def main():
 
 	if options.output_base:
 		verified_dir = join(options.output_base, "verified")
+		try_makedirs(verified_dir)
 		bad_dir = join(options.output_base, "bad")
+		try_makedirs(bad_dir)
 	else:
 		verified_dir = None
 		bad_dir = None
