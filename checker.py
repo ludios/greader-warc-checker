@@ -10,6 +10,7 @@ import subprocess
 import datetime
 import random
 import traceback
+import distutils.spawn
 
 from optparse import OptionParser
 
@@ -183,7 +184,7 @@ def get_info_from_warc_fname(fname):
 	return dict(uploader=uploader, item_name=item_name, basename=basename(fname))
 
 
-def check_warc(fname, info, greader_items, href_log, reqres_log):
+def check_warc(fname, info, greader_items, href_log, reqres_log, exes):
 	uploader = info['uploader']
 	item_name = info['item_name']
 	expected_urls = set(full_greader_url(efu) for efu in get_expected_encoded_feed_urls(greader_items, item_name))
@@ -194,7 +195,15 @@ def check_warc(fname, info, greader_items, href_log, reqres_log):
 	# of Python code that wires up subprocesses.
 	# "Z8c8Jv5QWmpgVRxUsGoulMw" is the embedded 404 image we want to ignore.
 	# Do not add a ^ to the second grep - it will slow things 6x.
-	args = ['/bin/sh', '-c', r"""gunzip --to-stdout '%s' | grep -G --color=never -v "^Z8c8Jv5QWmpgVRxUsGoulMw" | grep -P --color=never -o 'href\\u003d\\"[^\\]+\\"|"continuation":"C.{10}C"|WARC-Target-URI: .*|HTTP/1\.1 .*'""" % (fname,)]
+	ignore_re = r'^Z8c8Jv5QWmpgVRxUsGoulMw'
+	keep_re = r'href\\u003d\\"[^\\]+\\"|"continuation":"C.{10}C"|WARC-Target-URI: .*|HTTP/1\.1 .*'
+	assert not "'" in ignore_re
+	assert not "'" in keep_re
+	args = [exes['sh'], '-c', r"""
+%(gunzip)s --to-stdout '%(fname)s' |
+%(grep)s -G --color=never -v '%(ignore_re)s' |
+%(grep)s -P --color=never -o '%(keep_re)s'""".replace("\n", "") % dict(
+		fname=fname, ignore_re=ignore_re, keep_re=keep_re, **exes)]
 	proc = subprocess.Popen(args, stdout=subprocess.PIPE)
 	found_hrefs = set()
 	got_urls = set()
@@ -221,6 +230,32 @@ def check_warc(fname, info, greader_items, href_log, reqres_log):
 	if href_log is not None:
 		for h in sorted_hrefs:
 			href_log.write(h + "\n")
+
+
+def get_exes():
+	bzip2_exe = distutils.spawn.find_executable('lbzip2')
+	if not bzip2_exe:
+		print "Install lbzip2 for faster bzip2-encoding performance on multi-core machines"
+		bzip2_exe = distutils.spawn.find_executable('bzip2')
+		if not bzip2_exe:
+			raise RuntimeError("lbzip2 or bzip2 not found in PATH")
+
+	gunzip_exe = distutils.spawn.find_executable('unpigz')
+	if not gunzip_exe:
+		print "Install pigz for faster .warc.gz decoding performance on multi-core machines"
+		gunzip_exe = distutils.spawn.find_executable('gunzip')
+		if not gunzip_exe:
+			raise RuntimeError("unpigz or gunzip not found in PATH")
+
+	grep_exe = distutils.spawn.find_executable('grep')
+	if not grep_exe:
+		raise RuntimeError("grep not found in PATH")
+
+	sh_exe = distutils.spawn.find_executable('sh')
+	if not sh_exe:
+		raise RuntimeError("sh not found in PATH")
+
+	return dict(bzip2=bzip2_exe, gunzip=gunzip_exe, grep=grep_exe, sh=sh_exe)
 
 
 def main():
@@ -255,6 +290,8 @@ def main():
 		verified_dir = None
 		bad_dir = None
 
+	exes = get_exes()
+
 	if options.lists_dir:
 		now = datetime.datetime.now()
 		full_date = now.isoformat().replace("T", "_").replace(':', '-') + "_" + str(random.random())[2:8]
@@ -275,13 +312,15 @@ def main():
 		reqres_log = None
 		verification_log = None
 
+	# TODO: print processing speed in MB/s
+
 	for directory, dirnames, filenames in os.walk(options.input_base):
 		for f in filenames:
 			fname = os.path.join(directory, f)
 			if fname.endswith('.warc.gz'):
 				info = get_info_from_warc_fname(fname)
 				try:
-					check_warc(fname, info, options.greader_items, href_log, reqres_log)
+					check_warc(fname, info, options.greader_items, href_log, reqres_log, exes)
 				except BadWARC, e:
 					json.dump(dict(
 						checker_version=__version__, valid=False,
