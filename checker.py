@@ -5,6 +5,8 @@ import sys
 import gzip
 import re
 import subprocess
+import datetime
+import random
 
 from optparse import OptionParser
 
@@ -163,7 +165,7 @@ def read_request_responses(grepfh, hrefs):
 			raise RuntimeError("Invalid state %r" % (state,))
 
 
-def check_warc(fname, greader_items):
+def check_warc(fname, greader_items, href_log, reqres_log):
 	uploader = basename(parent(fname))
 	_, item_name, _, _ = basename(fname).split('-')
 	expected_urls = set(full_greader_url(efu) for efu in get_expected_encoded_feed_urls(greader_items, item_name))
@@ -180,7 +182,9 @@ def check_warc(fname, greader_items):
 	got_urls = set()
 	for req_rep in read_request_responses(proc.stdout, found_hrefs):
 		req_rep_extra = dict(item_name=item_name, uploader=uploader, basename=basename(fname), **req_rep)
-		print json.dumps(req_rep_extra)
+		##print json.dumps(req_rep_extra)
+		json.dump(req_rep_extra, reqres_log)
+		reqres_log.write("\n")
 		url = req_rep['url']
 		status_code = req_rep['status_code']
 		if req_rep['continuation'] is not None:
@@ -194,7 +198,9 @@ def check_warc(fname, greader_items):
 
 	sorted_hrefs = list(found_hrefs)
 	sorted_hrefs.sort()
-	##print "\n".join(repr(s) for s in sorted(found_hrefs))
+	if href_log is not None:
+		for h in sorted_hrefs:
+			href_log.write(h + "\n")
 
 
 def main():
@@ -203,7 +209,7 @@ def main():
 	parser.add_option("-i", "--input-base", dest="input_base", help="Base directory containing ./username/xxx.warc.gz files.")
 	parser.add_option("-o", "--output-base", dest="output_base", help="Base directory to which to move input files; it will contain ./verified/username/xxx.warc.gz or ./bad-[failure mode]/username/xxx.warc.gz.  Should be on the same filesystem as --input-base.")
 	parser.add_option('-g', "--greader-items", dest="greader_items", help="greader-items directory containing ./000000/0000000000.gz files.  (Needed to know which URLs we expect in a WARC.)")
-	parser.add_option("-l", "--lists", dest="lists", help="Directory to write lists of status codes, bad items, new URLs to.")
+	parser.add_option("-l", "--lists-dir", dest="lists_dir", help="Directory to write lists of status codes, bad items, new URLs to.")
 	parser.add_option("-u", "--upload", dest="upload", help="rsync destination to sync lists to.")
 
 	options, args = parser.parse_args()
@@ -216,8 +222,8 @@ def main():
 	if not options.output_base:
 		print "--output-base not specified; files in --input-base will not be moved"
 
-	if not options.lists:
-		print "--lists not specified; no lists will be written"
+	if not options.lists_dir:
+		print "--lists-dir not specified; no lists will be written"
 
 	if not options.upload:
 		print "--upload not specified; lists will not be uploaded"
@@ -228,12 +234,27 @@ def main():
 	else:
 		verified_dir = bad_dir = None
 
+	if options.lists_dir:
+		now = datetime.datetime.now()
+		full_date = now.isoformat().replace("T", "_").replace(':', '-') + "_" + str(random.random())[2:8]
+
+		href_log_fname = join(options.lists_dir, "hrefs-" + full_date)
+		assert not os.path.exists(href_log_fname), href_log_fname
+		href_log = open(href_log_fname, "wb")
+
+		reqres_log_fname = join(options.lists_dir, "reqres-" + full_date)
+		assert not os.path.exists(reqres_log_fname), reqres_log_fname
+		reqres_log = open(reqres_log_fname, "wb")
+	else:
+		href_log = None
+		reqres_log = None
+
 	for directory, dirnames, filenames in os.walk(options.input_base):
 		for f in filenames:
 			fname = os.path.join(directory, f)
 			if fname.endswith('.warc.gz'):
 				try:
-					check_warc(fname, options.greader_items)
+					check_warc(fname, options.greader_items, href_log, reqres_log)
 				except BadWARC:
 					# TODO move the file to bad/ instead
 					raise
