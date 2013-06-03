@@ -370,8 +370,6 @@ def main():
 		reqres_log = None
 		verification_log = None
 
-	# TODO: print processing speed in MB/s
-
 	try:
 		check_input_base(options, verified_dir, bad_dir, href_log, reqres_log, verification_log, exes)
 	finally:
