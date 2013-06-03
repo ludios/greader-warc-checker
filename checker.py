@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = 20130603.1111
+__version__ = 20130603.1120
 
 import os
 import sys
@@ -306,7 +306,6 @@ def main():
 	parser.add_option("-o", "--output-base", dest="output_base", help="Base directory to which to move input files; it will contain ./verified/username/xxx.warc.gz or ./bad/username/xxx.warc.gz.  Should be on the same filesystem as --input-base.")
 	parser.add_option('-g', "--greader-items", dest="greader_items", help="greader-items directory containing ./000000/0000000000.gz files.  (Needed to know which URLs we expect in a WARC.)")
 	parser.add_option("-l", "--lists-dir", dest="lists_dir", help="Directory to write lists of status codes, bad items, new URLs to.")
-	parser.add_option("-u", "--upload", dest="upload", help="rsync destination to sync lists to.")
 
 	options, args = parser.parse_args()
 	if not options.input_base or  not options.greader_items:
@@ -320,9 +319,6 @@ def main():
 
 	if not options.lists_dir:
 		print "--lists-dir not specified; no lists will be written"
-
-	if not options.upload:
-		print "--upload not specified; lists will not be uploaded"
 
 	if options.output_base:
 		verified_dir = join(options.output_base, "verified")
