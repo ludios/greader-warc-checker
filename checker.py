@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "20130603.1329"
+__version__ = "20130603.1349"
 
 import os
 import sys
@@ -192,18 +192,14 @@ def check_warc(fname, info, greader_items, href_log, reqres_log, exes):
 
 	# We use pipes to allow for multi-core execution without writing a crazy amount
 	# of Python code that wires up subprocesses.
-	# "Z8c8Jv5QWmpgVRxUsGoulMw" is the embedded 404 image we want to ignore.
-	# Do not add a ^ to the second grep - it will slow things 6x.
-	ignore_re = r'^Z8c8Jv5QWmpgVRxUsGoulMw'
+	# Do not add a ^ to the grep - it will slow things 6x.
 	keep_re = r'href\\u003d\\"[^\\]+\\"|"continuation":"C.{10}C"|WARC-Target-URI: .*|HTTP/1\.1 .*'
-	assert not "'" in ignore_re
 	assert not "'" in keep_re
 	args = [exes['sh'], '-c', r"""
 trap '' INT tstp 30;
 %(gunzip)s --to-stdout '%(fname)s' |
-%(grep)s -G --color=never -v '%(ignore_re)s' |
 %(grep)s -P --color=never -o '%(keep_re)s'""".replace("\n", "") % dict(
-		fname=fname, ignore_re=ignore_re, keep_re=keep_re, **exes)]
+		fname=fname, keep_re=keep_re, **exes)]
 	proc = subprocess.Popen(args, stdout=subprocess.PIPE, bufsize=4*1024*1024, close_fds=True)
 	found_hrefs = set()
 	got_urls = set()
