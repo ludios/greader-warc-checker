@@ -165,9 +165,18 @@ def read_request_responses(grepfh, hrefs):
 			raise RuntimeError("Invalid state %r" % (state,))
 
 
-def check_warc(fname, greader_items, href_log, reqres_log):
+def get_info_from_warc_fname(fname):
+	"""
+	Where fname is absolute path, or at least includes the uploader parent dir
+	"""
 	uploader = basename(parent(fname))
 	_, item_name, _, _ = basename(fname).split('-')
+	return dict(uploader=uploader, item_name=item_name, basename=basename(fname))
+
+
+def check_warc(fname, info, greader_items, href_log, reqres_log):
+	uploader = info['uploader']
+	item_name = info['item_name']
 	expected_urls = set(full_greader_url(efu) for efu in get_expected_encoded_feed_urls(greader_items, item_name))
 
 	check_filename(fname)
@@ -181,7 +190,7 @@ def check_warc(fname, greader_items, href_log, reqres_log):
 	found_hrefs = set()
 	got_urls = set()
 	for req_rep in read_request_responses(proc.stdout, found_hrefs):
-		req_rep_extra = dict(item_name=item_name, uploader=uploader, basename=basename(fname), **req_rep)
+		req_rep_extra = dict(item_name=item_name, uploader=uploader, basename=info['basename'], **req_rep)
 		##print json.dumps(req_rep_extra)
 		json.dump(req_rep_extra, reqres_log)
 		reqres_log.write("\n")
@@ -245,19 +254,31 @@ def main():
 		reqres_log_fname = join(options.lists_dir, "reqres-" + full_date)
 		assert not os.path.exists(reqres_log_fname), reqres_log_fname
 		reqres_log = open(reqres_log_fname, "wb")
+
+		verification_log_fname = join(options.lists_dir, "verification-" + full_date)
+		assert not os.path.exists(verification_log_fname), verification_log_fname
+		verification_log = open(verification_log_fname, "wb")
 	else:
 		href_log = None
 		reqres_log = None
+		verification_log = None
 
 	for directory, dirnames, filenames in os.walk(options.input_base):
 		for f in filenames:
 			fname = os.path.join(directory, f)
 			if fname.endswith('.warc.gz'):
+				info = get_info_from_warc_fname(fname)
 				try:
-					check_warc(fname, options.greader_items, href_log, reqres_log)
-				except BadWARC:
+					check_warc(fname, info, options.greader_items, href_log, reqres_log)
+				except BadWARC, e:
 					# TODO move the file to bad/ instead
-					raise
+					json.dump(dict(valid=False, exception=repr(e), traceback=e.traceback, **info), verification_log)
+					verification_log.write("\n")
+					verification_log.flush()
+				else:
+					json.dump(dict(valid=True, exception=None, traceback=None, **info), verification_log)
+					verification_log.write("\n")
+					verification_log.flush()
 
 
 if __name__ == '__main__':
