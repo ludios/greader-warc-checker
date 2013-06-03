@@ -29,6 +29,10 @@ def slurp_gz(fname):
 	return contents
 
 
+def get_expected_encoded_feed_urls(greader_items, item_name):
+	return slurp_gz(join(greader_items, item_name[0:6], item_name + '.gz')).rstrip("\n").split("\n")
+
+
 def full_greader_url(encoded_feed_url):
 	return (
 		"https://www.google.com/reader/api/0/stream/contents/feed/" +
@@ -101,7 +105,7 @@ def read_request_responses(grepfh, hrefs):
 			# Should be an exact duplicate of the last line
 			assert last_url is not None, last_url
 			if not line.startswith("WARC-Target-URI: "):
-				raise BadWARC("Mssing WARC-Target-URI for response")
+				raise BadWARC("Missing WARC-Target-URI for response")
 			response_url = line[17:-2]
 			if response_url != last_url:
 				raise BadWARC("WARC-Target-URI for response did not match request: %r" % ((last_url, response_url),))
@@ -148,8 +152,7 @@ def check_warc(fname, greader_items):
 
 	uploader = basename(parent(fname))
 	_, item_name, _, _ = basename(fname).split('-')
-	expected_encoded_feed_urls = slurp_gz(join(greader_items, item_name[0:6], item_name + '.gz')).rstrip("\n").split("\n")
-	expected_urls = set(full_greader_url(efu) for efu in expected_encoded_feed_urls)
+	expected_urls = set(full_greader_url(efu) for efu in get_expected_encoded_feed_urls(greader_items, item_name))
 
 	assert not ' ' in fname, fname
 	assert not "'" in fname, fname
@@ -178,6 +181,8 @@ def check_warc(fname, greader_items):
 	if expected_urls != got_urls:
 		raise BadWARC("WARC is missing %r or has extra URLs %r" % (expected_urls - got_urls, got_urls - expected_urls))
 
+	sorted_hrefs = list(found_hrefs)
+	sorted_hrefs.sort()
 	##print "\n".join(repr(s) for s in sorted(found_hrefs))
 
 
