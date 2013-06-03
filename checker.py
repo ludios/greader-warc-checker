@@ -212,8 +212,9 @@ def check_warc(fname, info, greader_items, href_log, reqres_log, exes):
 	for req_rep in read_request_responses(proc.stdout, found_hrefs):
 		req_rep_extra = dict(item_name=item_name, uploader=uploader, basename=info['basename'], **req_rep)
 		##print json.dumps(req_rep_extra)
-		json.dump(req_rep_extra, reqres_log)
-		reqres_log.write("\n")
+		if reqres_log:
+			json.dump(req_rep_extra, reqres_log)
+			reqres_log.write("\n")
 		url = req_rep['url']
 		status_code = req_rep['status_code']
 		if req_rep['continuation'] is not None:
@@ -241,24 +242,26 @@ def check_input_base(options, verified_dir, bad_dir, href_log, reqres_log, verif
 				try:
 					check_warc(fname, info, options.greader_items, href_log, reqres_log, exes)
 				except BadWARC:
-					json.dump(dict(
-						checker_version=__version__, valid=False,
-						traceback=traceback.format_exc(), **info
-					), verification_log)
-					verification_log.write("\n")
-					verification_log.flush()
+					if verification_log:
+						json.dump(dict(
+							checker_version=__version__, valid=False,
+							traceback=traceback.format_exc(), **info
+						), verification_log)
+						verification_log.write("\n")
+						verification_log.flush()
 
 					if bad_dir:
 						dest_fname = join(bad_dir, filename_without_prefix(fname, options.input_base))
 						try_makedirs(parent(dest_fname))
 						os.rename(fname, dest_fname)
 				else:
-					json.dump(dict(
-						checker_version=__version__, valid=True,
-						traceback=None, **info
-					), verification_log)
-					verification_log.write("\n")
-					verification_log.flush()
+					if verification_log:
+						json.dump(dict(
+							checker_version=__version__, valid=True,
+							traceback=None, **info
+						), verification_log)
+						verification_log.write("\n")
+						verification_log.flush()
 
 					if verified_dir:
 						dest_fname = join(verified_dir, filename_without_prefix(fname, options.input_base))
