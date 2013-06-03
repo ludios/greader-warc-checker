@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = 20130603.1218
+__version__ = 20130603.1227
 
 import os
 import sys
@@ -252,7 +252,7 @@ def check_input_base(options, verified_dir, bad_dir, href_log, reqres_log, verif
 		for f in filenames:
 			if get_mtime(stopfile) != initial_stop_mtime:
 				print "Stopping because %s was touched" % (stopfile,)
-				break
+				return
 
 			fname = os.path.join(directory, f)
 			if fname.endswith('.warc.gz'):
@@ -390,10 +390,14 @@ def main():
 	finally:
 		if href_log is not None:
 			href_log.close()
-			href_log_proc.wait() # TODO: maybe .communicate() instead to avoid deadlocks
+			_, stderr = href_log_proc.communicate()
+			if stderr:
+				print stderr
 		if reqres_log is not None:
 			reqres_log.close()
-			reqres_log_proc.wait() # TODO: maybe .communicate() instead to avoid deadlocks
+			_, stderr = reqres_log_proc.communicate()
+			if stderr:
+				print stderr
 		if verification_log is not None:
 			verification_log.close()
 
