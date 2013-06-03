@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = 20130603.1021
+__version__ = 20130603.1029
 
 import os
 import sys
@@ -15,10 +15,7 @@ import distutils.spawn
 
 from optparse import OptionParser
 
-try:
-	import simplejson as json
-except ImportError:
-	import json
+import json
 
 parent = os.path.dirname
 basename = os.path.basename
