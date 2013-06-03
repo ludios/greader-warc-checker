@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = 20130603.1227
+__version__ = 20130603.1238
 
 import os
 import sys
@@ -204,7 +204,7 @@ trap '' INT tstp 30;
 %(grep)s -G --color=never -v '%(ignore_re)s' |
 %(grep)s -P --color=never -o '%(keep_re)s'""".replace("\n", "") % dict(
 		fname=fname, ignore_re=ignore_re, keep_re=keep_re, **exes)]
-	proc = subprocess.Popen(args, stdout=subprocess.PIPE, bufsize=4*1024*1024)
+	proc = subprocess.Popen(args, stdout=subprocess.PIPE, bufsize=4*1024*1024, close_fds=True)
 	found_hrefs = set()
 	got_urls = set()
 	# Note: if gzip file is corrupt, stdout will be empty and a BadWARC will be raised
@@ -359,10 +359,13 @@ def main():
 		# trap '' INT tstp 30; prevents sh from catching SIGINT (ctrl-c).  If untrapped,
 		# bzip2 or lbzip2 will be killed when you hit ctrl-c, leaving you with a corrupt .bz2.
 		# (Sadly, this `trap` does not seem to work with lbzip2.)
+		#
+		# We use close_fds=True because otherwise .communicate() later deadlocks on
+		# Python 2.6.  See http://stackoverflow.com/questions/14615462/why-does-communicate-deadlock-when-used-with-multiple-popen-subprocesses
 		href_log_proc = subprocess.Popen(
 			[exes['sh'], '-c', r"trap '' INT tstp 30; %(bzip2)s > %(href_log_fname)s" %
 						dict(href_log_fname=href_log_fname, **exes)],
-			stdin=subprocess.PIPE, bufsize=4*1024*1024)
+			stdin=subprocess.PIPE, bufsize=4*1024*1024, close_fds=True)
 		href_log = href_log_proc.stdin
 
 		reqres_log_fname = join(options.lists_dir, full_date + ".reqres.bz2")
@@ -372,7 +375,7 @@ def main():
 		reqres_log_proc = subprocess.Popen(
 			[exes['sh'], '-c', r"trap '' INT tstp 30; %(bzip2)s > %(reqres_log_fname)s" %
 				dict(reqres_log_fname=reqres_log_fname, **exes)],
-			stdin=subprocess.PIPE, bufsize=4*1024*1024)
+			stdin=subprocess.PIPE, bufsize=4*1024*1024, close_fds=True)
 		reqres_log = reqres_log_proc.stdin
 
 		# Don't use bzip for this one; we want to flush it line by line
