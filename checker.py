@@ -1,5 +1,7 @@
 #!/usr/bin/env python
 
+__version__ = 20130603.0813
+
 import os
 import sys
 import gzip
@@ -275,11 +277,17 @@ def main():
 					check_warc(fname, info, options.greader_items, href_log, reqres_log)
 				except BadWARC, e:
 					# TODO move the file to bad/ instead
-					json.dump(dict(valid=False, traceback=traceback.format_exc(), **info), verification_log)
+					json.dump(dict(
+						checker_version=__version__, valid=False,
+						traceback=traceback.format_exc(), **info
+					), verification_log)
 					verification_log.write("\n")
 					verification_log.flush()
 				else:
-					json.dump(dict(valid=True, traceback=None, **info), verification_log)
+					json.dump(dict(
+						checker_version=__version__, valid=True,
+						traceback=None, **info
+					), verification_log)
 					verification_log.write("\n")
 					verification_log.flush()
 
