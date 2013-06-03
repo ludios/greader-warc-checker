@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "20130603.2116"
+__version__ = "20130603.2239"
 
 import os
 import sys
@@ -102,7 +102,7 @@ def read_request_responses(grepfh, hrefs):
 		if not line:
 			if last_url is not None:
 				if status_code is None:
-					raise BadWARC("Did not get a status code for %r" % (last_url,))
+					raise BadWARC("End of file but did not get a status code for %r" % (last_url,))
 				yield {"url": last_url, "continuation": continuation, "status_code": status_code}
 			break
 
@@ -113,7 +113,7 @@ def read_request_responses(grepfh, hrefs):
 			elif line.startswith("WARC-Target-URI: "):
 				if last_url is not None:
 					if status_code is None:
-						raise BadWARC("Did not get a status code for %r" % (last_url,))
+						raise BadWARC("Got next request but did not get a status code for last response %r" % (last_url,))
 					yield {"url": last_url, "continuation": continuation, "status_code": status_code}
 				continuation = None
 				status_code = None
