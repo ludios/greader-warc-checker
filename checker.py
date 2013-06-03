@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "20130603.2239"
+__version__ = "20130603.2309"
 
 import os
 import sys
@@ -139,13 +139,20 @@ def read_request_responses(grepfh, hrefs):
 			state = NEED_STATUS_LINE
 
 		elif state == NEED_STATUS_LINE:
-			try:
-				http_version, status_code, message = line.split(" ", 2)
-			except ValueError:
-				raise BadWARC("Got unexpected status line %r" % (line,))
-			if http_version != "HTTP/1.1"or status_code not in ("200", "404"):
-				raise BadWARC("Got unexpected status line %r" % (line,))
-			state = WANT_CONTINUATION
+			# Sometimes wget writes more than request to the WARC (does the first
+			# time out?), so we may see a third (or fourth?) WARC-Target-URI: instead
+			# of a status line.
+			if line.startswith("WARC-Target-URI: ") and line[17:-2] == last_url:
+				pass
+				# state still NEED_STATUS_LINE
+			else:
+				try:
+					http_version, status_code, message = line.split(" ", 2)
+				except ValueError:
+					raise BadWARC("Got unexpected status line %r" % (line,))
+				if http_version != "HTTP/1.1"or status_code not in ("200", "404"):
+					raise BadWARC("Got unexpected status line %r" % (line,))
+				state = WANT_CONTINUATION
 
 		elif state == WANT_CONTINUATION:
 			# could get continuation (once chance at this), or a link, or next request
