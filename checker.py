@@ -277,12 +277,9 @@ def get_exes():
 		if not bzip2_exe:
 			raise RuntimeError("lbzip2 or bzip2 not found in PATH")
 
-	gunzip_exe = distutils.spawn.find_executable('unpigz')
+	gunzip_exe = distutils.spawn.find_executable('gunzip')
 	if not gunzip_exe:
-		print "Install pigz for faster .warc.gz decoding performance on multi-core machines"
-		gunzip_exe = distutils.spawn.find_executable('gunzip')
-		if not gunzip_exe:
-			raise RuntimeError("unpigz or gunzip not found in PATH")
+		raise RuntimeError("gunzip not found in PATH")
 
 	grep_exe = distutils.spawn.find_executable('grep')
 	if not grep_exe:
