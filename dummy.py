@@ -8,9 +8,25 @@ import subprocess
 
 from optparse import OptionParser
 
+try:
+	import simplejson as json
+except ImportError:
+	import json
+
 parent = os.path.dirname
 basename = os.path.basename
 join = os.path.join
+
+
+BAD_FNAME_RE = re.compile(r"""[\x00"'\\]+""")
+
+def check_filename(fname):
+	"""
+	Raise L{ValueError} on any filename that can't be safely passed into a quoted
+	shell command.
+	"""
+	if re.findall(BAD_FNAME_RE, fname):
+		raise ValueError("Bad filename %r" % (fname,))
 
 
 def try_makedirs(p):
@@ -148,28 +164,23 @@ def read_request_responses(grepfh, hrefs):
 
 
 def check_warc(fname, greader_items):
-	print fname
-
 	uploader = basename(parent(fname))
 	_, item_name, _, _ = basename(fname).split('-')
 	expected_urls = set(full_greader_url(efu) for efu in get_expected_encoded_feed_urls(greader_items, item_name))
 
-	assert not ' ' in fname, fname
-	assert not "'" in fname, fname
-	assert not "\\" in fname, fname
+	check_filename(fname)
 
 	# We use pipes to allow for multi-core execution without writing a crazy amount
 	# of Python code that wires up subprocesses.
-
-	# "Z8c8Jv5QWmpgVRxUsGoulMw" is the embedded 404 image we want to ignore
-
-	# Do not add a ^ to the second grep - it will slow things 6x
+	# "Z8c8Jv5QWmpgVRxUsGoulMw" is the embedded 404 image we want to ignore.
+	# Do not add a ^ to the second grep - it will slow things 6x.
 	args = ['/bin/sh', '-c', r"""gunzip --to-stdout '%s' | grep -G --color=never -v "^Z8c8Jv5QWmpgVRxUsGoulMw" | grep -P --color=never -o 'href\\u003d\\"[^\\]+\\"|"continuation":"C.{10}C"|WARC-Target-URI: .*|HTTP/1\.1 .*'""" % (fname,)]
 	proc = subprocess.Popen(args, stdout=subprocess.PIPE)
 	found_hrefs = set()
 	got_urls = set()
 	for req_rep in read_request_responses(proc.stdout, found_hrefs):
-		print req_rep
+		req_rep_extra = dict(item_name=item_name, uploader=uploader, basename=basename(fname), **req_rep)
+		print json.dumps(req_rep_extra)
 		url = req_rep['url']
 		status_code = req_rep['status_code']
 		if req_rep['continuation'] is not None:
