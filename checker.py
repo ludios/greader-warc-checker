@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "20130603.1349"
+__version__ = "20130603.2116"
 
 import os
 import sys
@@ -253,10 +253,18 @@ def check_input_base(options, verified_dir, bad_dir, href_log, reqres_log, verif
 	start = time.time()
 	size_total = 0
 	for directory, dirnames, filenames in os.walk(options.input_base):
+		if basename(directory).startswith("."):
+			print "Skipping dotdir %r" % (directory,)
+			continue
+
 		for f in filenames:
 			if get_mtime(stopfile) != initial_stop_mtime:
 				print "Stopping because %s was touched" % (stopfile,)
 				return
+
+			if f.startswith("."):
+				print "Skipping dotfile %r" % (f,)
+				continue
 
 			fname = os.path.join(directory, f)
 			if fname.endswith('.warc.gz'):
