@@ -7,6 +7,7 @@ import re
 import subprocess
 import datetime
 import random
+import traceback
 
 from optparse import OptionParser
 
@@ -189,6 +190,8 @@ def check_warc(fname, info, greader_items, href_log, reqres_log):
 	proc = subprocess.Popen(args, stdout=subprocess.PIPE)
 	found_hrefs = set()
 	got_urls = set()
+	# Note: if gzip file is corrupt, stdout will be empty and a BadWARC will be raised
+	# complaining about the WARC missing every URL it was expected to have.
 	for req_rep in read_request_responses(proc.stdout, found_hrefs):
 		req_rep_extra = dict(item_name=item_name, uploader=uploader, basename=info['basename'], **req_rep)
 		##print json.dumps(req_rep_extra)
@@ -247,15 +250,15 @@ def main():
 		now = datetime.datetime.now()
 		full_date = now.isoformat().replace("T", "_").replace(':', '-') + "_" + str(random.random())[2:8]
 
-		href_log_fname = join(options.lists_dir, "hrefs-" + full_date)
+		href_log_fname = join(options.lists_dir, full_date + ".hrefs")
 		assert not os.path.exists(href_log_fname), href_log_fname
 		href_log = open(href_log_fname, "wb")
 
-		reqres_log_fname = join(options.lists_dir, "reqres-" + full_date)
+		reqres_log_fname = join(options.lists_dir, full_date + ".reqres")
 		assert not os.path.exists(reqres_log_fname), reqres_log_fname
 		reqres_log = open(reqres_log_fname, "wb")
 
-		verification_log_fname = join(options.lists_dir, "verification-" + full_date)
+		verification_log_fname = join(options.lists_dir, full_date + ".verification")
 		assert not os.path.exists(verification_log_fname), verification_log_fname
 		verification_log = open(verification_log_fname, "wb")
 	else:
@@ -272,7 +275,7 @@ def main():
 					check_warc(fname, info, options.greader_items, href_log, reqres_log)
 				except BadWARC, e:
 					# TODO move the file to bad/ instead
-					json.dump(dict(valid=False, exception=repr(e), traceback=e.traceback, **info), verification_log)
+					json.dump(dict(valid=False, exception=repr(e), traceback=traceback.format_exc(), **info), verification_log)
 					verification_log.write("\n")
 					verification_log.flush()
 				else:
