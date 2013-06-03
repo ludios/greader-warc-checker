@@ -207,16 +207,26 @@ def main():
 	parser.add_option("-u", "--upload", dest="upload", help="rsync destination to sync lists to.")
 
 	options, args = parser.parse_args()
-	if not options.input_base or not options.output_base or not options.lists:
-		print"--input-base, --output-base, --greader-items, and --lists are required"
+	if not options.input_base or  not options.greader_items:
+		print "--input-base and --greader-items are required"
 		print
 		parser.print_help()
 		sys.exit(1)
 
-	verified_dir = join(options.output_base, "verified")
-	bad_status_code_dir = join(options.output_base, "bad-status-code")
-	bad_missing_urls = join(options.output_base, "bad-missing-urls")
-	bad_missing_continued_urls = join(options.output_base, "bad-missing-continued-urls")
+	if not options.output_base:
+		print "--output-base not specified; files in --input-base will not be moved"
+
+	if not options.lists:
+		print "--lists not specified; no lists will be written"
+
+	if not options.upload:
+		print "--upload not specified; lists will not be uploaded"
+
+	if options.output_base:
+		verified_dir = join(options.output_base, "verified")
+		bad_dir = join(options.output_base, "bad")
+	else:
+		verified_dir = bad_dir = None
 
 	for directory, dirnames, filenames in os.walk(options.input_base):
 		for f in filenames:
