@@ -243,6 +243,7 @@ def check_input_base(options, verified_dir, bad_dir, href_log, reqres_log, verif
 				try:
 					check_warc(fname, info, options.greader_items, href_log, reqres_log, exes)
 				except BadWARC:
+					print "bad", filename_without_prefix(fname, options.input_base)
 					if verification_log:
 						json.dump(dict(
 							checker_version=__version__, valid=False,
@@ -256,6 +257,7 @@ def check_input_base(options, verified_dir, bad_dir, href_log, reqres_log, verif
 						try_makedirs(parent(dest_fname))
 						os.rename(fname, dest_fname)
 				else:
+					print "ok ", filename_without_prefix(fname, options.input_base)
 					if verification_log:
 						json.dump(dict(
 							checker_version=__version__, valid=True,
@@ -338,7 +340,7 @@ def main():
 		href_log_proc = subprocess.Popen(
 			[exes['sh'], '-c', '%(bzip2)s > %(href_log_fname)s' %
 						dict(href_log_fname=href_log_fname, **exes)],
-			stdin=subprocess.PIPE)
+			stdin=subprocess.PIPE, bufsize=4*1024*1024)
 		href_log = href_log_proc.stdin
 
 		reqres_log_fname = join(options.lists_dir, full_date + ".reqres.bz2")
@@ -348,7 +350,7 @@ def main():
 		reqres_log_proc = subprocess.Popen(
 			[exes['sh'], '-c', '%(bzip2)s > %(reqres_log_fname)s' %
 				dict(reqres_log_fname=reqres_log_fname, **exes)],
-			stdin=subprocess.PIPE)
+			stdin=subprocess.PIPE, bufsize=4*1024*1024)
 		reqres_log = reqres_log_proc.stdin
 
 		# Don't use bzip for this one; we want to flush it line by line
