@@ -205,7 +205,7 @@ def check_warc(fname, info, greader_items, href_log, reqres_log, exes):
 %(grep)s -G --color=never -v '%(ignore_re)s' |
 %(grep)s -P --color=never -o '%(keep_re)s'""".replace("\n", "") % dict(
 		fname=fname, ignore_re=ignore_re, keep_re=keep_re, **exes)]
-	proc = subprocess.Popen(args, stdout=subprocess.PIPE)
+	proc = subprocess.Popen(args, stdout=subprocess.PIPE, bufsize=4*1024*1024)
 	found_hrefs = set()
 	got_urls = set()
 	# Note: if gzip file is corrupt, stdout will be empty and a BadWARC will be raised
