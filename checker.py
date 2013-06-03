@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = 20130603.0813
+__version__ = 20130603.0911
 
 import os
 import sys
@@ -232,6 +232,40 @@ def check_warc(fname, info, greader_items, href_log, reqres_log, exes):
 			href_log.write(h + "\n")
 
 
+def check_input_base(options, verified_dir, bad_dir, href_log, reqres_log, verification_log, exes):
+	for directory, dirnames, filenames in os.walk(options.input_base):
+		for f in filenames:
+			fname = os.path.join(directory, f)
+			if fname.endswith('.warc.gz'):
+				info = get_info_from_warc_fname(fname)
+				try:
+					check_warc(fname, info, options.greader_items, href_log, reqres_log, exes)
+				except BadWARC:
+					json.dump(dict(
+						checker_version=__version__, valid=False,
+						traceback=traceback.format_exc(), **info
+					), verification_log)
+					verification_log.write("\n")
+					verification_log.flush()
+
+					if bad_dir:
+						dest_fname = join(bad_dir, filename_without_prefix(fname, options.input_base))
+						try_makedirs(parent(dest_fname))
+						os.rename(fname, dest_fname)
+				else:
+					json.dump(dict(
+						checker_version=__version__, valid=True,
+						traceback=None, **info
+					), verification_log)
+					verification_log.write("\n")
+					verification_log.flush()
+
+					if verified_dir:
+						dest_fname = join(verified_dir, filename_without_prefix(fname, options.input_base))
+						try_makedirs(parent(dest_fname))
+						os.rename(fname, dest_fname)
+
+
 def get_exes():
 	bzip2_exe = distutils.spawn.find_executable('lbzip2')
 	if not bzip2_exe:
@@ -296,16 +330,30 @@ def main():
 		now = datetime.datetime.now()
 		full_date = now.isoformat().replace("T", "_").replace(':', '-') + "_" + str(random.random())[2:8]
 
-		href_log_fname = join(options.lists_dir, full_date + ".hrefs")
+		href_log_fname = join(options.lists_dir, full_date + ".hrefs.bz2")
+		check_filename(href_log_fname)
 		assert not os.path.exists(href_log_fname), href_log_fname
-		href_log = open(href_log_fname, "wb")
+		try_makedirs(parent(href_log_fname))
+		href_log_proc = subprocess.Popen(
+			[exes['sh'], '-c', '%(bzip2)s > %(href_log_fname)s' %
+						dict(href_log_fname=href_log_fname, **exes)],
+			stdin=subprocess.PIPE)
+		href_log = href_log_proc.stdin
 
-		reqres_log_fname = join(options.lists_dir, full_date + ".reqres")
+		reqres_log_fname = join(options.lists_dir, full_date + ".reqres.bz2")
+		check_filename(reqres_log_fname)
 		assert not os.path.exists(reqres_log_fname), reqres_log_fname
-		reqres_log = open(reqres_log_fname, "wb")
+		try_makedirs(parent(reqres_log_fname))
+		reqres_log_proc = subprocess.Popen(
+			[exes['sh'], '-c', '%(bzip2)s > %(reqres_log_fname)s' %
+				dict(reqres_log_fname=reqres_log_fname, **exes)],
+			stdin=subprocess.PIPE)
+		reqres_log = reqres_log_proc.stdin
 
+		# Don't use bzip for this one; we want to flush it line by line
 		verification_log_fname = join(options.lists_dir, full_date + ".verification")
 		assert not os.path.exists(verification_log_fname), verification_log_fname
+		try_makedirs(parent(verification_log_fname))
 		verification_log = open(verification_log_fname, "wb")
 	else:
 		href_log = None
@@ -314,37 +362,17 @@ def main():
 
 	# TODO: print processing speed in MB/s
 
-	for directory, dirnames, filenames in os.walk(options.input_base):
-		for f in filenames:
-			fname = os.path.join(directory, f)
-			if fname.endswith('.warc.gz'):
-				info = get_info_from_warc_fname(fname)
-				try:
-					check_warc(fname, info, options.greader_items, href_log, reqres_log, exes)
-				except BadWARC, e:
-					json.dump(dict(
-						checker_version=__version__, valid=False,
-						traceback=traceback.format_exc(), **info
-					), verification_log)
-					verification_log.write("\n")
-					verification_log.flush()
-
-					if bad_dir:
-						dest_fname = join(bad_dir, filename_without_prefix(fname, options.input_base))
-						try_makedirs(parent(dest_fname))
-						os.rename(fname, dest_fname)
-				else:
-					json.dump(dict(
-						checker_version=__version__, valid=True,
-						traceback=None, **info
-					), verification_log)
-					verification_log.write("\n")
-					verification_log.flush()
-
-					if verified_dir:
-						dest_fname = join(verified_dir, filename_without_prefix(fname, options.input_base))
-						try_makedirs(parent(dest_fname))
-						os.rename(fname, dest_fname)
+	try:
+		check_input_base(options, verified_dir, bad_dir, href_log, reqres_log, verification_log, exes)
+	finally:
+		if href_log is not None:
+			href_log.close()
+			href_log_proc.wait() # TODO: maybe .communicate() instead to avoid deadlocks
+		if reqres_log is not None:
+			reqres_log.close()
+			reqres_log_proc.wait() # TODO: maybe .communicate() instead to avoid deadlocks
+		if verification_log is not None:
+			verification_log.close()
 
 
 if __name__ == '__main__':
