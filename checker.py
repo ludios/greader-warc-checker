@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = 20130603.1120
+__version__ = 20130603.1218
 
 import os
 import sys
@@ -233,11 +233,27 @@ trap '' INT tstp 30;
 			href_log.write(h + "\n")
 
 
+def get_mtime(fname):
+	try:
+		s = os.stat(fname)
+	except OSError:
+		return None
+	return s.st_mtime
+
+
 def check_input_base(options, verified_dir, bad_dir, href_log, reqres_log, verification_log, exes):
+	stopfile = join(os.getcwd(), "STOP")
+	print "WARNING: To stop, do *not* use ctrl-c; instead, touch %s" % (stopfile,)
+	initial_stop_mtime = get_mtime(stopfile)
+
 	start = time.time()
 	size_total = 0
 	for directory, dirnames, filenames in os.walk(options.input_base):
 		for f in filenames:
+			if get_mtime(stopfile) != initial_stop_mtime:
+				print "Stopping because %s was touched" % (stopfile,)
+				break
+
 			fname = os.path.join(directory, f)
 			if fname.endswith('.warc.gz'):
 				size_total += os.stat(fname).st_size
