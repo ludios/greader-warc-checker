@@ -208,6 +208,7 @@ trap '' INT tstp 30;
 %(grep)s -P --color=never -o '%(keep_re)s'""".replace("\n", "") % dict(
 		fname=fname, keep_re=keep_re, **exes)]
 	gunzip_grep_proc = subprocess.Popen(args, stdout=subprocess.PIPE, bufsize=4*1024*1024, close_fds=True)
+	# TODO: do we need to read stderr continuously as well to avoid deadlock?
 	try:
 		found_hrefs = set()
 		got_urls = set()
