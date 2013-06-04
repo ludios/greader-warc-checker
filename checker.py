@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "20130603.2309"
+__version__ = "20130604.0030"
 
 import os
 import sys
@@ -207,24 +207,29 @@ trap '' INT tstp 30;
 %(gunzip)s --to-stdout '%(fname)s' |
 %(grep)s -P --color=never -o '%(keep_re)s'""".replace("\n", "") % dict(
 		fname=fname, keep_re=keep_re, **exes)]
-	proc = subprocess.Popen(args, stdout=subprocess.PIPE, bufsize=4*1024*1024, close_fds=True)
-	found_hrefs = set()
-	got_urls = set()
-	# Note: if gzip file is corrupt, stdout will be empty and a BadWARC will be raised
-	# complaining about the WARC missing every URL it was expected to have.
-	for req_rep in read_request_responses(proc.stdout, found_hrefs):
-		req_rep_extra = dict(item_name=item_name, uploader=uploader, basename=info['basename'], **req_rep)
-		##print json.dumps(req_rep_extra)
-		if reqres_log:
-			json.dump(req_rep_extra, reqres_log)
-			reqres_log.write("\n")
-		url = req_rep['url']
-		status_code = req_rep['status_code']
-		if req_rep['continuation'] is not None:
-			expected_urls.add(url_with_continuation(url, req_rep['continuation']))
-		got_urls.add(url)
-		if is_continued_url(url) and status_code != "200":
-			raise BadWARC("All continued responses must be status 200, was %r" % (status_code,))
+	gunzip_grep_proc = subprocess.Popen(args, stdout=subprocess.PIPE, bufsize=4*1024*1024, close_fds=True)
+	try:
+		found_hrefs = set()
+		got_urls = set()
+		# Note: if gzip file is corrupt, stdout will be empty and a BadWARC will be raised
+		# complaining about the WARC missing every URL it was expected to have.
+		for req_rep in read_request_responses(gunzip_grep_proc.stdout, found_hrefs):
+			req_rep_extra = dict(item_name=item_name, uploader=uploader, basename=info['basename'], **req_rep)
+			##print json.dumps(req_rep_extra)
+			if reqres_log:
+				json.dump(req_rep_extra, reqres_log)
+				reqres_log.write("\n")
+			url = req_rep['url']
+			status_code = req_rep['status_code']
+			if req_rep['continuation'] is not None:
+				expected_urls.add(url_with_continuation(url, req_rep['continuation']))
+			got_urls.add(url)
+			if is_continued_url(url) and status_code != "200":
+				raise BadWARC("All continued responses must be status 200, was %r" % (status_code,))
+	finally:
+		_, stderr = gunzip_grep_proc.communicate()
+		if stderr:
+			print stderr
 
 	# Don't check for extra URLs - it looks like we're failing to detect a small
 	# amount of continuation=s.
