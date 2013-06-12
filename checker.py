@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "20130604.0030"
+__version__ = "20130612.0754"
 
 import os
 import sys
@@ -91,7 +91,12 @@ def read_request_responses(grepfh, hrefs):
 
 	L{hrefs} is a set into which this will add JSON-encoded hrefs to.
 	"""
-	WANT_FIRST_TARGET_URI, NEED_SECOND_TARGET_URL, NEED_STATUS_LINE, WANT_CONTINUATION = range(4)
+	WANT_FIRST_TARGET_URI, \
+	NEED_SECOND_TARGET_URL, \
+	NEED_STATUS_LINE, \
+	WANT_CONTINUATION, \
+	WANT_WGET_LOG_STATUS = range(5)
+
 	state = WANT_FIRST_TARGET_URI
 	last_url = None
 	continuation = None
@@ -109,7 +114,7 @@ def read_request_responses(grepfh, hrefs):
 		if state == WANT_FIRST_TARGET_URI:
 			if line.startswith(r'href\u003d\"'):
 				hrefs.add(line[12:-3])
-			# in this state, we may get the Target-URI, or we may get an href
+			# in this state, we may get the Target-URI, or we may get an href, or URL in wget log
 			elif line.startswith("WARC-Target-URI: "):
 				if last_url is not None:
 					if status_code is None:
@@ -123,6 +128,9 @@ def read_request_responses(grepfh, hrefs):
 					state = WANT_FIRST_TARGET_URI
 				else:
 					state = NEED_SECOND_TARGET_URL
+			elif line.startswith("https://www.google.com/reader/api/") and "&client=ArchiveTeam:" in line:
+				last_url = line.rstrip()[:-1] # remove one ":"
+				state = WANT_WGET_LOG_STATUS
 			else:
 				# Ignore unexpected lines, as the lack of ^ in our initial grep filter
 				# outputs some garbage
@@ -155,7 +163,7 @@ def read_request_responses(grepfh, hrefs):
 				state = WANT_CONTINUATION
 
 		elif state == WANT_CONTINUATION:
-			# could get continuation (once chance at this), or a link, or next request
+			# could get continuation (once chance at this), or a link, or next request, or URL in wget log
 			if line.startswith(r'href\u003d\"'):
 				hrefs.add(line[12:-3])
 				state = WANT_FIRST_TARGET_URI
@@ -172,10 +180,22 @@ def read_request_responses(grepfh, hrefs):
 					state = WANT_FIRST_TARGET_URI
 				else:
 					state = NEED_SECOND_TARGET_URL
+			elif line.startswith("https://www.google.com/reader/api/") and "&client=ArchiveTeam:" in line:
+				last_url = line.rstrip()[:-1] # remove one ":"
+				state = WANT_WGET_LOG_STATUS
 			else:
 				# Ignore unexpected lines, as the lack of ^ in our initial grep filter
 				# outputs some garbage
 				pass
+
+		elif state == WANT_WGET_LOG_STATUS:
+			error_string, code_string, rest = line.split(None, 2)
+			status_code = code_string.rstrip(":")
+			yield {"url": last_url, "continuation": None, "status_code": status_code}
+			continuation = None
+			status_code = None
+			last_url = None
+			state = WANT_FIRST_TARGET_URI
 
 		else:
 			raise RuntimeError("Invalid state %r" % (state,))
@@ -200,7 +220,7 @@ def check_warc(fname, info, greader_items, href_log, reqres_log, exes):
 	# We use pipes to allow for multi-core execution without writing a crazy amount
 	# of Python code that wires up subprocesses.
 	# Do not add a ^ to the grep - it will slow things 6x.
-	keep_re = r'href\\u003d\\"[^\\]+\\"|"continuation":"C.{10}C"|WARC-Target-URI: .*|HTTP/1\.1 .*'
+	keep_re = r'href\\u003d\\"[^\\]+\\"|"continuation":"C.{10}C"|WARC-Target-URI: .*|HTTP/1\.1 .*| ERROR 404: Not Found\.|https://www\.google\.com/reader/api/.*client=ArchiveTeam:'
 	assert not "'" in keep_re
 	args = [exes['sh'], '-c', r"""
 trap '' INT tstp 30;
