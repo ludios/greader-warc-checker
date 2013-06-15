@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "20130615.1150"
+__version__ = "20130615.1321"
 
 import os
 import sys
@@ -262,6 +262,9 @@ trap '' INT tstp 30;
 		_, stderr = gunzip_grep_proc.communicate()
 		if stderr:
 			print stderr
+			raise BadWARC("Got stderr from gunzip-grep process: %r" % (stderr,))
+		if gunzip_grep_proc.returncode != 0:
+			raise BadWARC("Got process exit code %r from gunzip-grep process" % (gunzip_grep_proc.returncode,))
 
 	# Don't check for extra URLs - it looks like we're failing to detect a small
 	# amount of continuation=s.
