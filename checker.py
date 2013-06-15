@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "20130615.1321"
+__version__ = "20130615.1330"
 
 import os
 import sys
@@ -299,6 +299,7 @@ def check_input_base(options, verified_dir, bad_dir, href_log, reqres_log, verif
 
 	start = time.time()
 	size_total = 0
+	count = 0
 	for directory, dirnames, filenames in os.walk(options.input_base):
 		if basename(directory).startswith("."):
 			print "Skipping dotdir %r" % (directory,)
@@ -315,6 +316,11 @@ def check_input_base(options, verified_dir, bad_dir, href_log, reqres_log, verif
 
 			fname = os.path.join(directory, f)
 			if fname.endswith('.warc.gz'):
+				count += 1
+				if options.check_limit and count > options.check_limit:
+					print "Stopping because --check-limit=%r was reached" % (options.check_limit,)
+					return
+
 				size_total += os.stat(fname).st_size
 				def get_mb_sec():
 					return ("%.2f MB/s" % (size_total/(time.time() - start) / (1024 * 1024))).rjust(10)
@@ -382,6 +388,7 @@ def main():
 	parser.add_option("-o", "--output-base", dest="output_base", help="Base directory to which to move input files; it will contain ./verified/username/xxx.warc.gz or ./bad/username/xxx.warc.gz.  Should be on the same filesystem as --input-base.")
 	parser.add_option('-g', "--greader-items", dest="greader_items", help="greader-items directory containing ./000000/0000000000.gz files.  (Needed to know which URLs we expect in a WARC.)  Can be a local directory or an http:// URI.")
 	parser.add_option("-l", "--lists-dir", dest="lists_dir", help="Directory to write lists of status codes, bad items, new URLs to.")
+	parser.add_option("-c", "--check-limit", dest="check_limit", type="int", default=None, help="Exit after checking this many items")
 
 	options, args = parser.parse_args()
 	if not options.input_base or  not options.greader_items:
