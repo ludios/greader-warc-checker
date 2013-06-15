@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "20130612.0754"
+__version__ = "20130615.1150"
 
 import os
 import sys
@@ -11,6 +11,8 @@ import subprocess
 import datetime
 import random
 import traceback
+import zlib
+import urllib2
 import distutils.spawn
 
 from optparse import OptionParser
@@ -55,8 +57,17 @@ def slurp_gz(fname):
 	return contents
 
 
+def gunzip_string(s):
+	return zlib.decompress(s, 16 + zlib.MAX_WBITS)
+
+
 def get_expected_encoded_feed_urls(greader_items, item_name):
-	return slurp_gz(join(greader_items, item_name[0:6], item_name + '.gz')).rstrip("\n").split("\n")
+	if greader_items.startswith("http://"):
+		text = gunzip_string(urllib2.urlopen(greader_items + item_name[0:6] + '/' + item_name + '.gz').read())
+	else:
+		text = slurp_gz(join(greader_items, item_name[0:6], item_name + '.gz'))
+
+	return text.rstrip("\n").split("\n")
 
 
 def full_greader_url(encoded_feed_url):
@@ -366,7 +377,7 @@ def main():
 
 	parser.add_option("-i", "--input-base", dest="input_base", help="Base directory containing ./username/xxx.warc.gz files.")
 	parser.add_option("-o", "--output-base", dest="output_base", help="Base directory to which to move input files; it will contain ./verified/username/xxx.warc.gz or ./bad/username/xxx.warc.gz.  Should be on the same filesystem as --input-base.")
-	parser.add_option('-g', "--greader-items", dest="greader_items", help="greader-items directory containing ./000000/0000000000.gz files.  (Needed to know which URLs we expect in a WARC.)")
+	parser.add_option('-g', "--greader-items", dest="greader_items", help="greader-items directory containing ./000000/0000000000.gz files.  (Needed to know which URLs we expect in a WARC.)  Can be a local directory or an http:// URI.")
 	parser.add_option("-l", "--lists-dir", dest="lists_dir", help="Directory to write lists of status codes, bad items, new URLs to.")
 
 	options, args = parser.parse_args()
