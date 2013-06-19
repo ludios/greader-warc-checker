@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "20130615.1427"
+__version__ = "20130619.1226"
 
 import os
 import sys
@@ -221,6 +221,11 @@ def get_info_from_warc_fname(fname):
 	return dict(uploader=uploader, item_name=item_name, basename=basename(fname))
 
 
+def get_hrefs_fname(fname):
+	assert fname.endswith(".warc.gz"), fname
+	return fname.rsplit(".", 2)[0] + ".hrefs.bz2"
+
+
 def check_warc(fname, info, greader_items, href_log, reqres_log, exes):
 	uploader = info['uploader']
 	item_name = info['item_name']
@@ -231,13 +236,19 @@ def check_warc(fname, info, greader_items, href_log, reqres_log, exes):
 	# We use pipes to allow for multi-core execution without writing a crazy amount
 	# of Python code that wires up subprocesses.
 	# Do not add a ^ to the grep - it will slow things 6x.
-	keep_re = r'href\\u003d\\"[^\\]+\\"|"continuation":"C.{10}C"|WARC-Target-URI: .*|HTTP/1\.1 .*| ERROR 404: Not Found\.|https://www\.google\.com/reader/api/.*client=ArchiveTeam:'
+	extract_links = not os.path.exists(get_hrefs_fname(fname))
+	if extract_links:
+		keep_re = r'href\\u003d\\"[^\\]+\\"|"continuation":"C.{10}C"|WARC-Target-URI: .*|HTTP/1\.1 .*| ERROR 404: Not Found\.|https://www\.google\.com/reader/api/.*client=ArchiveTeam:'
+		grep_flags = '-P'
+	else:
+		keep_re = r'''"continuation":"C.\{10\}C"\|HTTP/1\.1 ... .\|WARC-Target-URI: .*\| ERROR 404: Not Found\.\|https://www\.google\.com/reader/api/.*client=ArchiveTeam:'''
+		grep_flags = ''
 	assert not "'" in keep_re
 	args = [exes['sh'], '-c', r"""
 trap '' INT tstp 30;
 %(gunzip)s --to-stdout '%(fname)s' |
-LC_LOCALE=C %(grep)s -P --color=never -o '%(keep_re)s'""".replace("\n", "") % dict(
-		fname=fname, keep_re=keep_re, **exes)]
+LC_LOCALE=C %(grep)s %(grep_flags)s --color=never -o '%(keep_re)s'""".replace("\n", "") % dict(
+		fname=fname, keep_re=keep_re, grep_flags=grep_flags, **exes)]
 	gunzip_grep_proc = subprocess.Popen(args, stdout=subprocess.PIPE, bufsize=4*1024*1024, close_fds=True)
 	# TODO: do we need to read stderr continuously as well to avoid deadlock?
 	try:
@@ -292,7 +303,7 @@ def get_mtime(fname):
 	return s.st_mtime
 
 
-def check_input_base(options, verified_dir, bad_dir, href_log, reqres_log, verification_log, exes):
+def check_input_base(options, verified_dir, bad_dir, hrefs_dir, href_log, reqres_log, verification_log, exes, full_date):
 	stopfile = join(os.getcwd(), "STOP")
 	print "WARNING: To stop, do *not* use ctrl-c; instead, touch %s" % (stopfile,)
 	initial_stop_mtime = get_mtime(stopfile)
@@ -329,33 +340,35 @@ def check_input_base(options, verified_dir, bad_dir, href_log, reqres_log, verif
 				try:
 					check_warc(fname, info, options.greader_items, href_log, reqres_log, exes)
 				except BadWARC:
-					print get_mb_sec(), "bad", filename_without_prefix(fname, options.input_base)
-					if verification_log:
-						json.dump(dict(
-							checker_version=__version__, valid=False,
-							traceback=traceback.format_exc(), **info
-						), verification_log)
-						verification_log.write("\n")
-						verification_log.flush()
-
-					if bad_dir:
-						dest_fname = join(bad_dir, filename_without_prefix(fname, options.input_base))
-						try_makedirs(parent(dest_fname))
-						os.rename(fname, dest_fname)
+					msg = "bad"
+					valid = False
+					tb = traceback.format_exc()
+					dest_dir = bad_dir
 				else:
-					print get_mb_sec(), "ok ", filename_without_prefix(fname, options.input_base)
-					if verification_log:
-						json.dump(dict(
-							checker_version=__version__, valid=True,
-							traceback=None, **info
-						), verification_log)
-						verification_log.write("\n")
-						verification_log.flush()
+					msg = "ok "
+					valid = True
+					tb = None
+					dest_dir = verified_dir
 
-					if verified_dir:
-						dest_fname = join(verified_dir, filename_without_prefix(fname, options.input_base))
-						try_makedirs(parent(dest_fname))
-						os.rename(fname, dest_fname)
+				print get_mb_sec(), msg, filename_without_prefix(fname, options.input_base)
+				if verification_log:
+					json.dump(dict(
+						checker_version=__version__, valid=valid,
+						traceback=tb, **info
+					), verification_log)
+					verification_log.write("\n")
+					verification_log.flush()
+
+				if dest_dir:
+					dest_fname = join(dest_dir, filename_without_prefix(fname, options.input_base))
+					try_makedirs(parent(dest_fname))
+					os.rename(fname, dest_fname)
+
+				if hrefs_dir and os.path.exists(get_hrefs_fname(fname)):
+					full_date_hour = full_date[:13]
+					hrefs_child_dir = join(hrefs_dir, full_date_hour)
+					try_makedirs(hrefs_child_dir)
+					os.rename(get_hrefs_fname(fname), join(hrefs_child_dir, full_date + '-' + info['item_name'] + '.hrefs.bz2'))
 
 
 def get_exes():
@@ -407,17 +420,19 @@ def main():
 		verified_dir = join(options.output_base, "verified")
 		try_makedirs(verified_dir)
 		bad_dir = join(options.output_base, "bad")
+		hrefs_dir = join(options.output_base, "hrefs")
 		try_makedirs(bad_dir)
 	else:
 		verified_dir = None
 		bad_dir = None
+		hrefs_dir = None
 
 	exes = get_exes()
 
-	if options.lists_dir:
-		now = datetime.datetime.now()
-		full_date = now.isoformat().replace("T", "_").replace(':', '-') + "_" + str(random.random())[2:8]
+	now = datetime.datetime.now()
+	full_date = now.isoformat().replace("T", "_").replace(':', '-') + "_" + str(random.random())[2:8]
 
+	if options.lists_dir:
 		href_log_fname = join(options.lists_dir, full_date + ".hrefs.bz2")
 		check_filename(href_log_fname)
 		assert not os.path.exists(href_log_fname), href_log_fname
@@ -455,7 +470,7 @@ def main():
 		verification_log = None
 
 	try:
-		check_input_base(options, verified_dir, bad_dir, href_log, reqres_log, verification_log, exes)
+		check_input_base(options, verified_dir, bad_dir, hrefs_dir, href_log, reqres_log, verification_log, exes, full_date)
 	finally:
 		if href_log is not None:
 			href_log.close()
