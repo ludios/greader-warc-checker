@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "20130619.1309"
+__version__ = "20130619.1926"
 
 import os
 import sys
@@ -222,8 +222,11 @@ def get_info_from_warc_fname(fname):
 
 
 def get_hrefs_fname(fname):
-	assert fname.endswith(".cooked.warc.gz"), fname
-	return fname.rsplit(".", 3)[0] + ".hrefs.bz2"
+	assert fname.endswith(".warc.gz"), fname
+	if fname.endswith(".cooked.warc.gz"):
+		return fname.rsplit(".", 3)[0] + ".hrefs.bz2"
+	else:
+		return fname.rsplit(".", 2)[0] + ".hrefs.bz2"
 
 
 def check_warc(fname, info, greader_items, href_log, reqres_log, exes):
@@ -303,6 +306,11 @@ def get_mtime(fname):
 	return s.st_mtime
 
 
+def has_hrefs_or_is_old(fname, seconds):
+	assert os.path.exists(fname), fname
+	return os.path.exists(get_hrefs_fname(fname)) or get_mtime(fname) < time.time() - seconds
+
+
 def check_input_base(options, verified_dir, bad_dir, hrefs_dir, href_log, reqres_log, verification_log, exes, full_date):
 	stopfile = join(os.getcwd(), "STOP")
 	print "WARNING: To stop, do *not* use ctrl-c; instead, touch %s" % (stopfile,)
@@ -326,7 +334,7 @@ def check_input_base(options, verified_dir, bad_dir, hrefs_dir, href_log, reqres
 				continue
 
 			fname = os.path.join(directory, f)
-			if fname.endswith('.warc.gz'):
+			if fname.endswith('.warc.gz') and has_hrefs_or_is_old(fname, 600):
 				count += 1
 				if options.check_limit and count > options.check_limit:
 					print "Stopping because --check-limit=%r was reached" % (options.check_limit,)
