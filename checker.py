@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "20130619.1226"
+__version__ = "20130619.1309"
 
 import os
 import sys
@@ -222,8 +222,8 @@ def get_info_from_warc_fname(fname):
 
 
 def get_hrefs_fname(fname):
-	assert fname.endswith(".warc.gz"), fname
-	return fname.rsplit(".", 2)[0] + ".hrefs.bz2"
+	assert fname.endswith(".cooked.warc.gz"), fname
+	return fname.rsplit(".", 3)[0] + ".hrefs.bz2"
 
 
 def check_warc(fname, info, greader_items, href_log, reqres_log, exes):
