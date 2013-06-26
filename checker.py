@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "20130619.1926"
+__version__ = "20130626.0933"
 
 import os
 import sys
@@ -62,10 +62,23 @@ def gunzip_string(s):
 
 
 def get_expected_encoded_feed_urls(greader_items, item_name):
-	if greader_items.startswith("http://"):
-		text = gunzip_string(urllib2.urlopen(greader_items + item_name[0:6] + '/' + item_name + '.gz').read())
-	else:
-		text = slurp_gz(join(greader_items, item_name[0:6], item_name + '.gz'))
+	text = None
+	e = None
+
+	for location in greader_items.split("|"):
+		try:
+			if location.startswith("http://"):
+				text = gunzip_string(urllib2.urlopen(location + item_name[0:6] + '/' + item_name + '.gz').read())
+			else:
+				text = slurp_gz(join(location, item_name[0:6], item_name + '.gz'))
+		except (OSError, IOError), e:
+			continue
+		else:
+			break
+
+	if text is None:
+		raise RuntimeError("Could not get expected feed URLs for "
+			"%r; tried %r; last error was %r" % (item_name, greader_items, e))
 
 	return text.rstrip("\n").split("\n")
 
@@ -407,7 +420,7 @@ def main():
 
 	parser.add_option("-i", "--input-base", dest="input_base", help="Base directory containing ./username/xxx.warc.gz files.")
 	parser.add_option("-o", "--output-base", dest="output_base", help="Base directory to which to move input files; it will contain ./verified/username/xxx.warc.gz or ./bad/username/xxx.warc.gz.  Should be on the same filesystem as --input-base.")
-	parser.add_option('-g', "--greader-items", dest="greader_items", help="greader-items directory containing ./000000/0000000000.gz files.  (Needed to know which URLs we expect in a WARC.)  Can be a local directory or an http:// URI.")
+	parser.add_option('-g', "--greader-items", dest="greader_items", help="greader-items directory containing ./000000/0000000000.gz files.  (Needed to know which URLs we expect in a WARC.)  Can be a local directory or an http:// URI.  Separate multiple candidates with a pipe (|)")
 	parser.add_option("-l", "--lists-dir", dest="lists_dir", help="Directory to write lists of status codes, bad items, new URLs to.")
 	parser.add_option("-c", "--check-limit", dest="check_limit", type="int", default=None, help="Exit after checking this many items")
 
