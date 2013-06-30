@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "20130627.1538"
+__version__ = "20130630.1112"
 
 import os
 import sys
@@ -182,7 +182,7 @@ def read_request_responses(grepfh, hrefs):
 					http_version, status_code, message = line.split(" ", 2)
 				except ValueError:
 					raise BadWARC("Got unexpected status line %r" % (line,))
-				if http_version != "HTTP/1.1" or status_code not in ("200", "404", "414"):
+				if http_version not in ("HTTP/1.0", "HTTP/1.1") or status_code not in ("200", "404", "414"):
 					raise BadWARC("Got unexpected status line %r" % (line,))
 				state = WANT_CONTINUATION
 
@@ -254,10 +254,10 @@ def check_warc(fname, info, greader_items, href_log, reqres_log, exes):
 	# Do not add a ^ to the grep - it will slow things 6x.
 	extract_links = not os.path.exists(get_hrefs_fname(fname))
 	if extract_links:
-		keep_re = r'href\\u003d\\"[^\\]+\\"|"continuation":"C.{10}C"|WARC-Target-URI: .*|HTTP/1\.1 .*| ERROR 404: Not Found\.|https://www\.google\.com/reader/api/.*client=ArchiveTeam:'
+		keep_re = r'href\\u003d\\"[^\\]+\\"|"continuation":"C.{10}C"|WARC-Target-URI: .*|HTTP/1\.[01] ... .| ERROR 404: Not Found\.|https://www\.google\.com/reader/api/.*client=ArchiveTeam:'
 		grep_flags = '-P'
 	else:
-		keep_re = r'''"continuation":"C.\{10\}C"\|HTTP/1\.1 ... .\|WARC-Target-URI: .*\| ERROR 404: Not Found\.\|https://www\.google\.com/reader/api/.*client=ArchiveTeam:'''
+		keep_re = r'''"continuation":"C.\{10\}C"\|HTTP/1\.[01] ... .\|WARC-Target-URI: .*\| ERROR 404: Not Found\.\|https://www\.google\.com/reader/api/.*client=ArchiveTeam:'''
 		grep_flags = ''
 	assert not "'" in keep_re
 	args = [exes['sh'], '-c', r"""
