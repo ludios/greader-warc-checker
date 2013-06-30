@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "20130630.1112"
+__version__ = "20130630.1301"
 
 import os
 import sys
@@ -213,7 +213,10 @@ def read_request_responses(grepfh, hrefs):
 				pass
 
 		elif state == WANT_WGET_LOG_STATUS:
-			error_string, code_string, rest = line.split(None, 2)
+			try:
+				error_string, code_string, rest = line.split(None, 2)
+			except ValueError:
+				raise BadWARC("wget log status line could not be split: %r" % (line,))
 			status_code = code_string.rstrip(":")
 			yield {"url": last_url, "continuation": None, "status_code": status_code}
 			continuation = None
