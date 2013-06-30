@@ -14,18 +14,19 @@ except ImportError:
 basename = os.path.basename
 
 def main():
-	basedirs = sys.argv[1:]
+	greader_items = sys.argv[1]
+	basedirs = sys.argv[2:]
+	assert basedirs, "Give me some basedirs containing .verification files"
 	valids = set()
 	invalids = set()
+	largest = 0
 	for basedir in basedirs:
 		for directory, dirnames, filenames in os.walk(basedir):
 			if basename(directory).startswith("."):
-				print "Skipping dotdir %r" % (directory,)
 				continue
 
 			for f in filenames:
 				if f.startswith("."):
-					print "Skipping dotfile %r" % (f,)
 					continue
 
 				fname = os.path.join(directory, f)
@@ -38,10 +39,12 @@ def main():
 								valids.add(data["item_name"])
 							else:
 								invalids.add(data["item_name"])
+							largest = max(largest, int(data["item_name"], 10))
 
-	needs_requeue = sorted(invalids - valids)
-	for item_name in needs_requeue:
-		print item_name
+	for n in xrange(largest):
+		item_name = str(n).zfill(10)
+		if not item_name in valids and os.path.exists(greader_items + '/' + item_name[:6] + '/' + item_name + '.gz'):
+			print item_name
 
 
 if __name__ == '__main__':
