@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "20130701.1854"
+__version__ = "20130701.1936"
 
 import os
 import sys
@@ -257,10 +257,10 @@ def check_warc(fname, info, greader_items, href_log, reqres_log, exes):
 	# Do not add a ^ to the grep - it will slow things 6x.
 	extract_links = not os.path.exists(get_hrefs_fname(fname))
 	if extract_links:
-		keep_re = r'href\\u003d\\"[^\\]+\\"|"continuation":"C.{10}C"|WARC-Target-URI: .*|HTTP/1\.[01] ... .| ERROR 404: Not Found\.|https://www\.google\.com/reader/api/.*client=ArchiveTeam:'
+		keep_re = r'href\\u003d\\"[^\\]+\\"|"continuation":"C.{10}C"|WARC-Target-URI: .*|HTTP/1\.[01] ... .|ERROR 404: Not Found\.|https://www\.google\.com/reader/api/.*client=ArchiveTeam:'
 		grep_flags = '-P'
 	else:
-		keep_re = r'''"continuation":"C.\{10\}C"\|HTTP/1\.[01] ... .\|WARC-Target-URI: .*\| ERROR 404: Not Found\.\|https://www\.google\.com/reader/api/.*client=ArchiveTeam:'''
+		keep_re = r'''"continuation":"C.\{10\}C"\|HTTP/1\.[01] ... .\|WARC-Target-URI: .*\|ERROR 404: Not Found\.\|https://www\.google\.com/reader/api/.*client=ArchiveTeam:'''
 		grep_flags = ''
 	assert not "'" in keep_re
 	args = [exes['sh'], '-c', r"""
