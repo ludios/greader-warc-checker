@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 
-__version__ = "20130630.1301"
+__version__ = "20130701.1854"
 
 import os
 import sys
@@ -182,7 +182,7 @@ def read_request_responses(grepfh, hrefs):
 					http_version, status_code, message = line.split(" ", 2)
 				except ValueError:
 					raise BadWARC("Got unexpected status line %r" % (line,))
-				if http_version not in ("HTTP/1.0", "HTTP/1.1") or status_code not in ("200", "404", "414"):
+				if http_version not in ("HTTP/1.0", "HTTP/1.1") or status_code not in ("200", "404", "414", "400"):
 					raise BadWARC("Got unexpected status line %r" % (line,))
 				state = WANT_CONTINUATION
 
